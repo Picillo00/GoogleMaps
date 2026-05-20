@@ -21,7 +21,7 @@
   body, html {
     margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overflow: hidden; touch-action: manipulation;
+    overflow: hidden;
   }
 
   #wrap {
@@ -41,12 +41,11 @@
   .state-thinking .dot { background: #f4b400; animation: pulse 1s infinite; }
   .state-ready .dot { background: var(--user-color); }
 
-  /* Area Chat: Permette lo scorrimento verticale libero (Swipe alto/basso) */
+  /* Area Chat: Scorrimento verticale libero e nativo */
   #display-box {
     flex-grow: 1; display: flex; flex-direction: column;
     gap: 12px; padding: 10px 0; overflow-y: auto;
     scroll-behavior: smooth;
-    touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
   }
   /* Nasconde la barra di scorrimento per estetica HUD */
@@ -79,27 +78,30 @@
   }
   .bubble.ai strong { color: var(--ai-color); }
 
-  /* NUOVO MENU HUD INFERIORE INTERATTIVO */
+  /* MENU HUD INFERIORE - Pulsanti nativi adatti alla banda neurale */
   #menu-bar {
     display: flex; gap: 10px; padding: 6px 0; background: var(--bg); z-index: 15;
   }
   .menu-btn {
-    flex: 1; padding: 12px; background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--dim); border-radius: 8px; color: var(--text);
-    font-weight: bold; font-size: 14px; letter-spacing: 1px; cursor: pointer;
-    text-align: center; transition: background 0.1s ease;
+    flex: 1; padding: 14px; background: #141414;
+    border: 1px solid var(--dim); border-radius: 16px; color: var(--text);
+    font-weight: bold; font-size: 15px; letter-spacing: 1px; cursor: pointer;
+    text-align: center; transition: background 0.2s, transform 0.1s;
+    outline: none;
   }
+  .menu-btn:active { transform: scale(0.95); }
+  
   #btn-talk {
     border-color: var(--user-color); color: var(--user-color);
     background: rgba(57, 255, 20, 0.02);
   }
-  #btn-talk:active { background: rgba(57, 255, 20, 0.15); }
+  #btn-talk:hover { background: rgba(57, 255, 20, 0.08); }
   
   #btn-rollout {
-    border-color: #ff3b3b; color: #ff3b3b;
-    background: rgba(255, 59, 59, 0.02);
+    border-color: #ff4a4a; color: #ff4a4a;
+    background: rgba(58, 26, 26, 0.3);
   }
-  #btn-rollout:active { background: rgba(255, 59, 59, 0.15); }
+  #btn-rollout:hover { background: rgba(74, 36, 36, 0.5); }
 
   #controls {
     font-size: 10px; color: var(--dim); text-align: center;
@@ -118,7 +120,7 @@
 
   @media (max-height: 360px) {
     .bubble { font-size: 14px; padding: 8px 12px; }
-    .menu-btn { padding: 8px; font-size: 12px; }
+    .menu-btn { padding: 10px; font-size: 13px; border-radius: 12px; }
   }
 </style>
 </head>
@@ -131,26 +133,23 @@
   </div>
 
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Ciao! Cronologia attiva con coda intelligente. Usa i pulsanti del menu in basso per interagire. Trascina la schermata verso l'alto o il basso per scorrere l'intera conversazione.</div>
+    <div class="bubble ai"><strong>IA:</strong> Ciao! Codice ottimizzato per i click della banda neurale. Usa i pulsanti nativi in basso. Puoi scorrere la chat normalmente trascinando verso l'alto o il basso.</div>
   </div>
 
   <div id="menu-bar">
-    <button id="btn-talk" class="menu-btn">PARLA</button>
-    <button id="btn-rollout" class="menu-btn">ROLLOUT</button>
+    <button id="btn-talk" class="menu-btn" onclick="handleTalkClick()">PARLA</button>
+    <button id="btn-rollout" class="menu-btn" onclick="handleRolloutClick()">ROLLOUT</button>
   </div>
 
   <div id="controls">
-    <b>Menu HUD:</b> Clicca i pulsanti • <b>Scorrimento:</b> Swipe verticale sulla chat per leggere tutto
+    <b>Menu HUD:</b> Click del bracciale sui pulsanti • <b>Scorrimento:</b> Trascina la chat per leggere
   </div>
 </div>
 
 <script>
-(() => {
   const statusBar = document.getElementById('status-bar');
   const statusText = document.getElementById('status-text');
   const displayBox = document.getElementById('display-box');
-  const btnTalk = document.getElementById('btn-talk');
-  const btnRollout = document.getElementById('btn-rollout');
 
   let recognition;
   let isListening = false;
@@ -190,7 +189,6 @@
     
     displayBox.appendChild(bubble);
     
-    // Auto-scroll verso il basso solo alla ricezione di nuovi messaggi
     setTimeout(() => {
       displayBox.scrollTop = displayBox.scrollHeight;
     }, 50);
@@ -314,29 +312,22 @@
     if (isListening) recognition.stop(); else recognition.start();
   }
 
-  /* ATTIVAZIONE TRAMITE PULSANTI DEL MENU (OTTIMIZZATO PER BANDA NEURALE) */
-  btnTalk.addEventListener('click', (e) => {
-    e.preventDefault();
+  /* FUNZIONI INLINE CHIAMATE DIRETTAMENTE DAL DISPOSITIVO */
+  function handleTalkClick() {
     toggleListening();
-  });
+  }
 
-  btnRollout.addEventListener('click', (e) => {
-    e.preventDefault();
+  function handleRolloutClick() {
     removeLastUserRequest();
-  });
+  }
 
-  /* FUNZIONI DI SCORRIMENTO MANUALE DA TASTIERA PC */
-  function scrollChatDown() { displayBox.scrollBy({ top: 100, behavior: 'smooth' }); }
-  function scrollChatUp() { displayBox.scrollBy({ top: -100, behavior: 'smooth' }); }
-
+  /* SUPPORTO TASTIERA PC / CONTROLLI SECONDARI */
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); toggleListening(); }
-    if (e.key === 'ArrowDown') { scrollChatDown(); }
-    if (e.key === 'ArrowUp') { scrollChatUp(); }
+    if (e.key === 'ArrowDown') { displayBox.scrollBy({ top: 100, behavior: 'smooth' }); }
+    if (e.key === 'ArrowUp') { displayBox.scrollBy({ top: -100, behavior: 'smooth' }); }
     if (e.key === 'Backspace' || e.key === 'Delete') { removeLastUserRequest(); }
   });
-
-})();
 </script>
 </body>
 </html>
