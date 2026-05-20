@@ -4,14 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD Voice Assistant</title>
+<title>HUD Infinite Chat</title>
 <style>
   :root {
     --bg: #000000;
     --text: #ffffff;
-    --dim: #888888;
-    --accent: #39ff14; /* Verde neon per HUD */
-    --listening: #ff3b3b; /* Rosso quando ascolta */
+    --dim: #666666;
+    --user-color: #39ff14; /* Verde per l'utente */
+    --ai-color: #00e5ff;   /* Ciano per l'IA */
+    --listening: #ff3b3b;
   }
   
   * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -23,39 +24,48 @@
   }
 
   #wrap {
-    display: flex; flex-direction: column; height: 100%; padding: 20px;
+    display: flex; flex-direction: column; height: 100%; padding: 15px;
     justify-content: space-between; align-items: center;
   }
 
   #status-bar {
-    font-size: 12px; font-weight: bold; color: var(--dim); letter-spacing: 2px;
-    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: bold; color: var(--dim); letter-spacing: 2px;
+    display: flex; align-items: center; gap: 6px; z-index: 10;
   }
   
-  /* Pallino di stato pulsante */
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
   .state-listening .dot { background: var(--listening); animation: pulse 1s infinite; }
-  .state-thinking .dot { background: #00e5ff; animation: pulse 1s infinite; }
-  .state-ready .dot { background: var(--accent); }
+  .state-thinking .dot { background: #f4b400; animation: pulse 1s infinite; }
+  .state-ready .dot { background: var(--user-color); }
 
-  /* Contenitore testo Risposta */
+  /* Finestra della Chat (Mostra un messaggio alla volta, enorme) */
   #display-box {
     flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
-    width: 100%; max-width: 500px; padding: 10px;
+    width: 100%; max-width: 500px; padding: 10px; position: relative;
   }
 
-  #user-prompt {
-    font-size: 14px; color: var(--accent); font-style: italic; margin-bottom: 12px;
-    min-height: 20px; text-align: left;
+  .chat-msg {
+    opacity: 0; transform: translateY(10px);
+    transition: all 0.25s ease; display: none;
+    text-align: left;
+  }
+  
+  .chat-msg.active {
+    display: block; opacity: 1; transform: translateY(0);
   }
 
-  #ai-response {
-    font-size: 18px; line-height: 1.4; text-align: left;
-    max-height: 70%; overflow-y: auto; color: #f0f0f0;
-  }
+  .sender { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .msg-text { font-size: 18px; line-height: 1.4; }
+
+  /* Classi per differenziare i messaggi */
+  .msg-user .sender { color: var(--user-color); }
+  .msg-user .msg-text { color: var(--user-color); font-style: italic; }
+  .msg-ai .sender { color: var(--ai-color); }
+  .msg-ai .msg-text { color: #f0f0f0; }
 
   #controls {
-    font-size: 11px; color: var(--dim); text-align: center;
+    font-size: 10px; color: var(--dim); text-align: center; line-height: 1.3;
+    border-top: 1px solid #222; padding-top: 8px; width: 100%;
   }
 
   @keyframes pulse {
@@ -64,10 +74,9 @@
     100% { transform: scale(0.9); opacity: 0.6; }
   }
 
-  /* Ottimizzazione display Ray-Ban */
   @media (max-height: 360px) {
-    #ai-response { font-size: 15px; line-height: 1.3; }
-    #user-prompt { font-size: 12px; margin-bottom: 6px; }
+    .msg-text { font-size: 15px; line-height: 1.3; }
+    .sender { margin-bottom: 3px; }
   }
 </style>
 </head>
@@ -76,16 +85,18 @@
 <div id="wrap">
   <div id="status-bar" class="state-ready">
     <div class="dot"></div>
-    <span id="status-text">PRONTO</span>
+    <span id="status-text">PRONTO [0/0]</span>
   </div>
 
   <div id="display-box">
-    <div id="user-prompt">Fai doppio click per parlare...</div>
-    <div id="ai-response">Ciao! Sono la tua IA ad attivazione vocale. Fai un doppio pinch sul bracciale, fai una domanda e io ti risponderò direttamente sull'HUD.</div>
+    <div class="chat-msg active msg-ai" id="welcome-msg">
+      <div class="sender">Sistema IA</div>
+      <div class="msg-text">Doppio Pinch per parlare. Pinch singolo/lungo per scorrere la cronologia su e giù.</div>
+    </div>
   </div>
 
   <div id="controls">
-    <b>Doppio Pinch:</b> Parla / Fai nuova domanda
+    <b>Doppio Pinch:</b> Parla • <b>Pinch Singolo:</b> Avanti • <b>Pinch Lungo:</b> Indietro
   </div>
 </div>
 
@@ -93,113 +104,173 @@
 (() => {
   const statusBar = document.getElementById('status-bar');
   const statusText = document.getElementById('status-text');
-  const userPrompt = document.getElementById('user-prompt');
-  const aiResponse = document.getElementById('ai-response');
+  const displayBox = document.getElementById('display-box');
+  const welcomeMsg = document.getElementById('welcome-msg');
 
   let recognition;
   let isListening = false;
+  
+  // Memoria storica dell'IA (Cronologia completa)
+  let chatHistory = []; 
+  // Indice del messaggio attualmente visualizzato sull'HUD
+  let currentViewIndex = -1; 
 
-  // 1. Configura il Riconoscimento Vocale di Google/Apple integrato nel browser
   if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SpeechRecognition();
-    recognition.lang = 'it-IT'; // Lingua italiana
-    recognition.continuous = false; // Si ferma appena smetti di parlare
-    recognition.interimResults = false; // Vuole solo il risultato finale completo
+    recognition.lang = 'it-IT';
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
     recognition.onstart = () => {
       isListening = true;
       statusBar.className = 'state-listening';
       statusText.textContent = 'ASCOLTO...';
-      userPrompt.textContent = 'Ti ascolto, parla ora...';
     };
 
-    recognition.onerror = (e) => {
-      console.error(e);
-      resetToReady('Errore Microfono');
-    };
+    recognition.onerror = () => resetStatus();
+    recognition.onend = () => { isListening = false; };
 
-    recognition.onend = () => {
-      isListening = false;
-    };
-
-    // Quando smetti di parlare, prende il testo e lo manda all'IA
     recognition.onresult = (event) => {
       const textSpoken = event.results[0][0].transcript;
-      userPrompt.textContent = `"${textSpoken}"`;
-      askAI(textSpoken);
+      addMessage('user', textSpoken);
+      askAI();
     };
-  } else {
-    userPrompt.textContent = "Errore: Riconoscimento vocale non supportato da questo browser.";
   }
 
-  // 2. Funzione per mandare il testo all'Intelligenza Artificiale pubblica
-  async function askAI(promptText) {
+  // Aggiunge un messaggio nella memoria grafica e logica
+  function addMessage(sender, text) {
+    // Rimuove il messaggio di benvenuto se presente
+    if (welcomeMsg) welcomeMsg.remove();
+
+    chatHistory.push({ sender: sender, text: text });
+    currentViewIndex = chatHistory.length - 1; // Vai subito all'ultimo messaggio ricevuto
+    
+    renderCurrentMessage();
+  }
+
+  // Mostra sull'HUD solo il messaggio selezionato dall'indice corrente
+  function renderCurrentMessage() {
+    if (chatHistory.length === 0) return;
+    
+    displayBox.innerHTML = ''; // Svuota la vista
+    
+    const msg = chatHistory[currentViewIndex];
+    const msgEl = document.createElement('div');
+    msgEl.className = `chat-msg active msg-${msg.sender}`;
+    msgEl.innerHTML = `
+      <div class="sender">${msg.sender === 'user' ? 'Tu' : 'IA'}</div>
+      <div class="msg-text">${msg.text}</div>
+    `;
+    displayBox.appendChild(msgEl);
+    
+    statusText.textContent = `CHAT [${currentViewIndex + 1}/${chatHistory.length}]`;
+  }
+
+  // Chiamata IA ultra-veloce con cronologia inclusa
+  async function askAI() {
     statusBar.className = 'state-thinking';
-    statusText.textContent = 'RICERCA IA...';
-    aiResponse.textContent = 'Sto pensando...';
+    statusText.textContent = 'ELABORAZIONE...';
+
+    // Trasforma la nostra cronologia nel formato letto dall'API
+    const apiMessages = [
+      { role: 'system', content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Sii estremamente conciso e diretto, massimo 2 frasi corte.' }
+    ];
+    
+    // Passa gli ultimi 6 messaggi per non rallentare l'API ma mantenere il filo del discorso
+    const recentHistory = chatHistory.slice(-6);
+    recentHistory.forEach(msg => {
+      apiMessages.push({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      });
+    });
 
     try {
-      // Usiamo un endpoint pubblico e gratuito (DuckDuckGo AI proxy libero)
-      // Nota per sviluppatori: Risposte ottimizzate e corte per display HUD
+      // Modello 'cloud' ultra-rapido ottimizzato per la velocità
       const response = await fetch('https://text.pollinations.ai/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: [
-            { role: 'system', content: 'Sei un assistente per occhiali HUD. Dai risposte brevissime, massimo 2 frasi, dritte al punto.' },
-            { role: 'user', content: promptText }
-          ]
+          model: 'openai', 
+          messages: apiMessages 
         })
       });
 
       const reply = await response.text();
-      aiResponse.textContent = reply;
-      resetToReady('PRONTO');
-
+      addMessage('ai', reply);
+      resetStatus();
     } catch (error) {
-      aiResponse.textContent = "Errore di connessione con l'IA. Riprova.";
-      resetToReady('ERRORE');
+      addMessage('ai', 'Errore di connessione. Riprova.');
+      resetStatus();
     }
   }
 
-  function resetToReady(label) {
+  function resetStatus() {
     statusBar.className = 'state-ready';
-    statusText.textContent = label;
+    statusText.textContent = chatHistory.length > 0 ? `CHAT [${currentViewIndex + 1}/${chatHistory.length}]` : 'PRONTO [0/0]';
+  }
+
+  // --- NAVIGAZIONE CRONOLOGIA ---
+  function scrollForward() {
+    if (chatHistory.length <= 1 || currentViewIndex >= chatHistory.length - 1) return;
+    currentViewIndex++;
+    renderCurrentMessage();
+  }
+
+  function scrollBackward() {
+    if (chatHistory.length <= 1 || currentViewIndex <= 0) return;
+    currentViewIndex--;
+    renderCurrentMessage();
   }
 
   function toggleListening() {
     if (!recognition) return;
-    if (isListening) {
-      recognition.stop();
-    } else {
-      // Richiede l'attivazione del microfono
-      recognition.start();
-    }
+    if (isListening) recognition.stop(); else recognition.start();
   }
 
-  // --- CONTROLLO BRACCIALE (Doppio Click / Pinch) ---
+  // --- GESTIONE BRACCIALE NEURAL-BAND ---
   let lastClickTime = 0;
-  const DOUBLE_DELAY = 300;
+  let longTimer = null;
+  let isLongAction = false;
+  const DOUBLE_DELAY = 280;
+  const LONG_DELAY = 450;
+
+  document.addEventListener('pointerdown', (e) => {
+    isLongAction = false;
+    clearTimeout(longTimer);
+    longTimer = setTimeout(() => {
+      isLongAction = true;
+      scrollBackward(); // PINCH LUNGO -> Torna indietro nella cronologia
+    }, LONG_DELAY);
+  });
 
   document.addEventListener('pointerup', (e) => {
+    clearTimeout(longTimer);
+    if (isLongAction) return;
+
     const now = Date.now();
     if (now - lastClickTime < DOUBLE_DELAY) {
-      // DOPPIO CLICK RILEVATO -> Attiva/Interrompe l'ascolto vocale
+      // DOPPIO PINCH -> Parla
       lastClickTime = 0;
       toggleListening();
       if(e) e.preventDefault();
       return;
     }
+
     lastClickTime = now;
+    setTimeout(() => {
+      if (lastClickTime !== now) return;
+      lastClickTime = 0;
+      scrollForward(); // PINCH SINGOLO -> Vai avanti nella cronologia
+    }, DOUBLE_DELAY);
   });
 
-  // Tasto Spazio su PC per testare comodamente da desktop
+  // Test da tastiera PC
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
-      e.preventDefault();
-      toggleListening();
-    }
+    if (e.code === 'Space') { e.preventDefault(); toggleListening(); }
+    if (e.key === 'ArrowDown') { scrollForward(); }
+    if (e.key === 'ArrowUp') { scrollBackward(); }
   });
 
 })();
