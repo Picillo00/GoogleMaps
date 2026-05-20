@@ -205,18 +205,35 @@
 
     try {
       const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=openai&system=${encodeURIComponent(apiMessages[0].content)}`;
-
       const response = await fetch(url, { method: 'GET' });
 
       if (!response.ok) throw new Error('Errore di risposta');
 
-      const reply = await response.text();
+      let reply = await response.text();
+      
+      // --- NUOVO FILTRO ANTI-JSON LEAK ---
+      reply = reply.trim();
+      if (reply.startsWith('{') && reply.endsWith('}')) {
+        try {
+          const jsonObj = JSON.parse(reply);
+          // Se c'è un contenuto testuale finale, usa quello
+          if (jsonObj.content && jsonObj.content !== "") {
+            reply = jsonObj.content;
+          } else {
+            // Se è solo un tool_call "sporco", diamo un messaggio di fallback
+            reply = "Ho avuto un'esitazione durante la ricerca. Puoi ripetere?";
+          }
+        } catch (parseError) {
+          // Se non è un JSON valido ma inizia con {, lo lasciamo passare
+        }
+      }
+      // ------------------------------------
+
       appendBubble('ai', reply);
       
     } catch (error) {
-      // Se l'errore è dovuto alla cancellazione manuale dell'utente, non mostriamo l'errore a schermo
       if (nextPrompt !== "__CANCELLED__") {
-        appendBubble('ai', 'Errore temporaneo. Salto alla prossima richiesta...');
+        appendBubble('ai', 'Errore temporaneo o ricerca fallita. Salto alla prossima richiesta...');
       }
     }
 
