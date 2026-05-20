@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD WhatsApp Style Chat with Neural Lock</title>
+<title>HUD WhatsApp Style Chat with Universal Mic Lock</title>
 <link rel="icon" type="image/png" href="preview.png.jpg">
 <style>
   * {
@@ -24,7 +24,7 @@
     padding: 12px;
     overflow: hidden;
     user-select: none;
-    -webkit-tap-highlight-color: transparent; /* Evita flash blu su schermi touch */
+    -webkit-tap-highlight-color: transparent;
   }
 
   .chat-container {
@@ -159,7 +159,7 @@
   </div>
 
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Sistema allineato con l'architettura Hardware Lock. Fai il pinch o invia l'input dal bracciale per testare la risposta.</div>
+    <div class="bubble ai"><strong>IA:</strong> Architettura Cloud Mic attiva. Apri questo indirizzo <strong>HTTPS</strong> sul telefono connesso alle Ray-Ban Meta per parlare liberamente dagli occhiali.</div>
   </div>
 
   <div class="buttons-menu">
@@ -175,51 +175,16 @@
   const btnTalk = document.getElementById('btn-talk');
   const btnRollout = document.getElementById('btn-rollout');
 
-  let recognition;
+  let mediaRecorder;
+  let audioChunks = [];
   let isListening = false;
   let isThinking = false; 
-  let isTransitioning = false; // NUOVO: Scudo atomico per evitare doppi inneschi hardware
-  let lastTalkTriggerTime = 0; // Separato timer per microfono
-  let lastRollTriggerTime = 0; // Separato timer per rollout
+  let isTransitioning = false; 
+  let lastTalkTriggerTime = 0; 
+  let lastRollTriggerTime = 0; 
   
   let chatHistory = []; 
   let requestQueue = []; 
-
-  // Inizializzazione controllata dell'API Speech Recognition
-  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.lang = 'it-IT';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      isListening = true;
-      isTransitioning = false; // Sblocca solo quando l'hardware risponde davvero
-      updateStatusDisplay('ASCOLTO...');
-    };
-
-    recognition.onerror = (event) => { 
-      isListening = false;
-      isTransitioning = false; // Sblocca in caso di errore
-      updateStatusDisplay('ERRORE VOCE: ' + event.error);
-      setTimeout(() => resetStatus(), 2000); // Ritorna visivamente allo stato pronto
-    };
-
-    recognition.onend = () => { 
-      isListening = false; 
-      isTransitioning = false; // Sblocca a fine registrazione
-      if (requestQueue.length === 0 && !isThinking) resetStatus();
-    };
-
-    recognition.onresult = (event) => {
-      const textSpoken = event.results[0][0].transcript;
-      appendBubble('user', textSpoken);
-      pushToQueue(textSpoken);
-    };
-  } else {
-    setTimeout(() => { updateStatusDisplay('VOCE NON SUPPORTATA DA WEBVIEW'); }, 500);
-  }
 
   function appendBubble(sender, text) {
     chatHistory.push({ sender: sender, text: text });
@@ -328,7 +293,7 @@
 
   function updateStatusDisplay(stateText) {
     if (stateText.includes('ASCOLTO')) statusBar.className = 'state-listening';
-    else if (stateText.includes('ELABORAZIONE') || stateText.includes('CODA')) statusBar.className = 'state-thinking';
+    else if (stateText.includes('ELABORAZIONE') || stateText.includes('CODA') || stateText.includes('TRASCRIZIONE')) statusBar.className = 'state-thinking';
     else statusBar.className = 'state-ready';
     
     statusText.textContent = stateText;
@@ -342,61 +307,94 @@
     }
   }
 
+  // NUOVA LOGICA: Registrazione Audio Remota via Cloud per aggirare il blocco della WebView
   async function toggleListening() {
-    if (!recognition) {
-      appendBubble('ai', 'Riconoscimento vocale non supportato sulla WebView.');
-      return;
-    }
-
     if (isTransitioning) return;
-    isTransitioning = true; 
+    isTransitioning = true;
 
     if (isListening) {
-      try {
-        recognition.stop();
-      } catch(e) {
-        isTransitioning = false;
+      // Ferma la registrazione dell'hardware
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
       }
     } else {
       updateStatusDisplay('INIZIALIZZAZIONE...');
-      
-      try {
-        // FORZATURA HARDWARE: Chiede l'accesso al flusso audio grezzo per "svegliare" il microfono Meta
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          // Chiudiamo subito il flusso temporaneo, ci serviva solo a forzare il popup dei permessi
-          stream.getTracks().forEach(track => track.stop());
-        }
-      } catch (mediaError) {
-        console.log("Sveglia hardware fallita o rifiutata:", mediaError);
-      }
+      audioChunks = [];
 
       try {
-        recognition.start();
+        // Forza l'apertura del flusso audio catturando l'input principale (il Bluetooth delle stanghette Meta)
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
-        // Failsafe visivo se l'onstart non risponde
-        setTimeout(() => { 
-          if (isTransitioning && !isListening) {
-            isTransitioning = false;
-            updateStatusDisplay('ERRORE: PERMESSI O HTTPS MANCANTI');
-            setTimeout(() => { resetStatus(); }, 2000);
-          }
-        }, 2500); 
+        mediaRecorder = new MediaRecorder(stream);
         
-      } catch(e) {
-        updateStatusDisplay('ERRORE AVVIO: ' + e.message);
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          isListening = false;
+          isTransitioning = false;
+          updateStatusDisplay('TRASCRIZIONE...');
+
+          const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+          
+          // Chiude le tracce hardware per rilasciare l'alimentazione del microfono degli occhiali
+          stream.getTracks().forEach(track => track.stop());
+
+          // Spedisce il file audio grezzo direttamente al server Cloud Whisper per la conversione in testo
+          await sendAudioToWhisper(audioBlob);
+        };
+
+        mediaRecorder.start();
+        isListening = true;
         isTransitioning = false;
+        updateStatusDisplay('ASCOLTO...');
+
+      } catch (err) {
+        console.error(err);
+        updateStatusDisplay('ERRORE: CONTROLLA HTTPS O PERMESSI');
+        isTransitioning = false;
+        setTimeout(() => resetStatus(), 2500);
       }
     }
   }
 
-  // GESTORE SICURO: Previene i doppi tap, i click simulati dall'hardware e blocca il propagation
+  // Motore di trascrizione integrato con Pollinations AI (Modello Whisper Open Source)
+  async function sendAudioToWhisper(blob) {
+    try {
+      const formData = new FormData();
+      formData.append('file', blob, 'audio.wav');
+      formData.append('model', 'whisper-large'); // Cambiato a modello Whisper cloud nativo
+
+      const response = await fetch('https://audio.pollinations.ai/v1/audio/transcriptions', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) throw new Error("Server di trascrizione non raggiungibile");
+
+      const data = await response.json();
+      const textSpoken = data.text ? data.text.trim() : "";
+
+      if (textSpoken.length > 1) {
+        appendBubble('user', textSpoken);
+        pushToQueue(textSpoken);
+      } else {
+        updateStatusDisplay('AUDIO NON RICONOSCIUTO');
+        setTimeout(() => resetStatus(), 1500);
+      }
+
+    } catch (err) {
+      updateStatusDisplay('ERRORE TRASCRIZIONE CLOUD');
+      setTimeout(() => resetStatus(), 2000);
+    }
+  }
+
   function safeTriggerTalk(e) {
     if (e && e.cancelable) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
 
     const now = Date.now();
-    // Aumentato a 800ms per filtrare i rimbalzi dei segnali hardware Neural/Touch
     if (now - lastTalkTriggerTime < 800) return; 
     lastTalkTriggerTime = now;
     
@@ -414,23 +412,18 @@
     removeLastUserRequest();
   }
 
-  // Ascoltatori puliti: in ambiente mobile/webview è preferibile usare solo click o pointerup
-  // per evitare che click e touchstart si attivino uno dopo l'altro.
   btnTalk.addEventListener('click', safeTriggerTalk);
-  btnTalk.addEventListener('pointerup', safeTriggerTalk); // Cattura anche input neurali avanzati
-  
+  btnTalk.addEventListener('pointerup', safeTriggerTalk);
   btnTalk.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') safeTriggerTalk(e);
   });
 
   btnRollout.addEventListener('click', safeTriggerRollout);
   btnRollout.addEventListener('pointerup', safeTriggerRollout);
-  
   btnRollout.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') safeTriggerRollout(e);
   });
 
-  // Aggancio iniziale del Focus ritardato per stabilizzare l'iniezione hardware del bracciale
   setTimeout(() => { 
     btnTalk.focus(); 
   }, 500);
