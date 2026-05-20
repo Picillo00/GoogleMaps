@@ -103,7 +103,6 @@
     margin-top: 10px;
   }
 
-  /* STRUTTURA BOTTONI SULLO STILE DI PICILLO CHESS */
   .menu-btn {
     border-radius: 16px;
     height: 55px;
@@ -122,7 +121,6 @@
     100% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; }
   }
 
-  /* EFFETTO DI HIGHLIGHT IDENTICO AL TUO NEURAL LOCK */
   .menu-btn:focus {
     animation: pulse-focus 0.6s infinite;
     z-index: 100;
@@ -160,7 +158,7 @@
   </div>
 
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Sistema allineato con l'architettura Hardware Lock di Picillo Chess. Fai il pinch sul bottone evidenziato per testare la risposta della Neural Band.</div>
+    <div class="bubble ai"><strong>IA:</strong> Sistema allineato con l'architettura Hardware Lock. Fai il pinch o invia l'input dal bracciale per testare la risposta della Neural Band.</div>
   </div>
 
   <div class="buttons-menu">
@@ -179,11 +177,12 @@
   let recognition;
   let isListening = false;
   let isThinking = false; 
-  let lastTriggerTime = 0; // Protezione anti-rimbalzo hardware
+  let lastTriggerTime = 0; 
   
   let chatHistory = []; 
   let requestQueue = []; 
 
+  // Inizializzazione controllata dell'API Speech Recognition con log a schermo
   if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SpeechRecognition();
@@ -196,14 +195,25 @@
       updateStatusDisplay('ASCOLTO...');
     };
 
-    recognition.onerror = () => resetStatus();
-    recognition.onend = () => { isListening = false; };
+    // Stampa l'errore specifico della WebView direttamente sulla barra di stato HUD
+    recognition.onerror = (event) => { 
+      updateStatusDisplay('ERRORE VOCE: ' + event.error);
+      isListening = false;
+    };
+
+    recognition.onend = () => { 
+      isListening = false; 
+      if (requestQueue.length === 0 && !isThinking) resetStatus();
+    };
 
     recognition.onresult = (event) => {
       const textSpoken = event.results[0][0].transcript;
       appendBubble('user', textSpoken);
       pushToQueue(textSpoken);
     };
+  } else {
+    // Segnale visivo nell'HUD se il browser integrato negli occhiali manca dell'API
+    setTimeout(() => { updateStatusDisplay('VOCE NON SUPPORTATA DA WEBVIEW'); }, 500);
   }
 
   function appendBubble(sender, text) {
@@ -328,31 +338,61 @@
   }
 
   function toggleListening() {
-    if (!recognition) return;
-    if (isListening) recognition.stop(); else recognition.start();
+    if (!recognition) {
+      appendBubble('ai', 'Riconoscimento vocale non supportato o bloccato su questa WebView hardware.');
+      return;
+    }
+    if (isListening) {
+      recognition.stop();
+    } else {
+      try {
+        recognition.start();
+      } catch(e) {
+        updateStatusDisplay('ERRORE AVVIO: ' + e.message);
+      }
+    }
   }
 
-  /* LOGICA DI CLICK STRUTTURATA SUL MODELLO DI PICILLO CHESS */
-  btnTalk.onclick = (e) => {
-    e.preventDefault();
+  // Intercettatori unificati per evitare blocchi legati alla natura dell'input emulato
+  function triggerTalk(e) {
+    if (e && e.type !== 'keydown') e.preventDefault(); 
     const now = Date.now();
-    if (now - lastTriggerTime < 300) return; // Antirimbalzo hardware
+    if (now - lastTriggerTime < 300) return; 
     lastTriggerTime = now;
     
     toggleListening();
-  };
+  }
 
-  btnRollout.onclick = (e) => {
-    e.preventDefault();
+  function triggerRollout(e) {
+    if (e && e.type !== 'keydown') e.preventDefault(); 
     const now = Date.now();
     if (now - lastTriggerTime < 300) return;
     lastTriggerTime = now;
     
     removeLastUserRequest();
-  };
+  }
 
-  // Focus automatico sul primo tasto all'avvio per agganciare subito la neural band
-  setTimeout(() => { btnTalk.focus(); }, 300);
+  // Assegnazione multipla degli ascoltatori di eventi per il bracciale (Click, Touch, Pressione Tasti)
+  btnTalk.addEventListener('click', triggerTalk);
+  btnTalk.addEventListener('touchstart', triggerTalk);
+  btnTalk.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.keyCode === 13 || e.keyCode === 32) {
+      triggerTalk(e);
+    }
+  });
+
+  btnRollout.addEventListener('click', triggerRollout);
+  btnRollout.addEventListener('touchstart', triggerRollout);
+  btnRollout.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.keyCode === 13 || e.keyCode === 32) {
+      triggerRollout(e);
+    }
+  });
+
+  // Aggancio iniziale del Focus ritardato per stabilizzare l'iniezione hardware del bracciale
+  setTimeout(() => { 
+    btnTalk.focus(); 
+  }, 500);
 </script>
 </body>
 </html>
