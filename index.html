@@ -111,7 +111,7 @@
   </div>
 
   <div id="controls">
-    <b>Doppio Pinch:</b> Parla • <b>Pinch Singolo:</b> Giù • <b>Pinch Lungo:</b> Su
+    <b>Doppio Pinch:</b> Parla • <b>Pinch Singolo:</b> Giù • <b>Pinch Lungo:</b> Su • <b>Swipe DX:</b> Cancella
   </div>
 </div>
 
@@ -214,11 +214,39 @@
       appendBubble('ai', reply);
       
     } catch (error) {
-      appendBubble('ai', 'Errore temporaneo. Salto alla prossima richiesta...');
+      // Se l'errore è dovuto alla cancellazione manuale dell'utente, non mostriamo l'errore a schermo
+      if (nextPrompt !== "__CANCELLED__") {
+        appendBubble('ai', 'Errore temporaneo. Salto alla prossima richiesta...');
+      }
     }
 
     // Delay di sicurezza di 500ms tra una richiesta e l'altra per non intasare l'IP
     setTimeout(processNextQueueItem, 500);
+  }
+
+  /* NUOVA FUNZIONE: Cancella l'ultima richiesta dell'utente */
+  function removeLastUserRequest() {
+    // 1. Controlla se c'è qualcosa nella coda in attesa
+    if (requestQueue.length > 0) {
+      requestQueue.pop(); // Rimuove l'ultimo elemento inserito nella coda
+    } 
+    
+    // 2. Trova e rimuove l'ultima bolla visiva dell'utente nel DOM e nell'array chatHistory
+    const userBubbles = displayBox.querySelectorAll('.bubble.user');
+    if (userBubbles.length > 0) {
+      const lastUserBubble = userBubbles[userBubbles.length - 1];
+      lastUserBubble.remove(); // Elimina la bolla dalla schermata
+      
+      // Rimuove l'ultimo messaggio 'user' anche dalla cronologia logica
+      for (let i = chatHistory.length - 1; i >= 0; i--) {
+        if (chatHistory[i].sender === 'user') {
+          chatHistory.splice(i, 1);
+          break;
+        }
+      }
+    }
+    
+    resetStatus();
   }
 
   function updateStatusDisplay(stateText) {
@@ -250,6 +278,32 @@
   let isLongAction = false;
   const DOUBLE_DELAY = 280;
   const LONG_DELAY = 450;
+
+  /* LOGICA DI SWIPE VERSO DESTRA */
+  let touchStartX = 0;
+  let touchStartY = 0;
+  const SWIPE_THRESHOLD = 60; // Distanza minima in pixel per attivare lo swipe
+  const SWIPE_RESTRAINT = 40; // Massimo scostamento verticale permesso durante lo swipe
+
+  document.addEventListener('touchstart', (e) => {
+    const touch = e.changedTouches[0];
+    touchStartX = touch.pageX;
+    touchStartY = touch.pageY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', (e) => {
+    const touch = e.changedTouches[0];
+    const distX = touch.pageX - touchStartX;
+    const distY = touch.pageY - touchStartY;
+
+    // Se si muove verso destra (distX > 0), supera la soglia e non è un movimento troppo verticale
+    if (distX >= SWIPE_THRESHOLD && Math.abs(distY) <= SWIPE_RESTRAINT) {
+      removeLastUserRequest();
+      e.preventDefault();
+      return;
+    }
+  }, { passive: false });
+
 
   document.addEventListener('pointerdown', (e) => {
     isLongAction = false;
@@ -284,6 +338,7 @@
     if (e.code === 'Space') { e.preventDefault(); toggleListening(); }
     if (e.key === 'ArrowDown') { scrollChatDown(); }
     if (e.key === 'ArrowUp') { scrollChatUp(); }
+    if (e.key === 'Backspace' || e.key === 'Delete') { removeLastUserRequest(); } // Backspace come fallback da tastiera
   });
 
 })();
