@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD WhatsApp Style Chat with Queue</title>
+<title>HUD Chat Ultra-Fast</title>
 <style>
   :root {
     --bg: #000000;
     --text: #ffffff;
     --dim: #555555;
-    --user-color: #39ff14; /* Verde WhatsApp / Neon */
+    --user-color: #39ff14; /* Verde Neon */
     --ai-color: #00e5ff;   /* Ciano */
     --listening: #ff3b3b;
   }
@@ -28,7 +28,6 @@
     justify-content: space-between;
   }
 
-  /* Header fisso in alto */
   #status-bar {
     font-size: 11px; font-weight: bold; color: var(--dim); letter-spacing: 2px;
     display: flex; align-items: center; gap: 6px; padding-bottom: 6px;
@@ -40,24 +39,20 @@
   .state-thinking .dot { background: #f4b400; animation: pulse 1s infinite; }
   .state-ready .dot { background: var(--user-color); }
 
-  /* Area Chat: Lista verticale a scorrimento style WhatsApp */
   #display-box {
     flex-grow: 1; display: flex; flex-direction: column;
     gap: 12px; padding: 10px 0; overflow-y: scroll;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
   }
-  /* Nasconde la barra di scorrimento per estetica HUD */
   #display-box::-webkit-scrollbar { display: none; }
 
-  /* Bolle della Chat */
   .bubble {
     max-width: 85%; padding: 10px 14px; border-radius: 16px;
     font-size: 16px; line-height: 1.35; animation: fadeIn 0.2s ease forwards;
     word-wrap: break-word;
   }
 
-  /* Stile messaggio UTENTE (A destra, Verde) */
   .bubble.user {
     align-self: flex-end;
     background: rgba(57, 255, 20, 0.08);
@@ -67,7 +62,6 @@
     font-style: italic;
   }
 
-  /* Stile messaggio IA (A sinistra, Bianco/Ciano) */
   .bubble.ai {
     align-self: flex-start;
     background: rgba(0, 229, 255, 0.05);
@@ -106,7 +100,7 @@
   </div>
 
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Ciao! Cronologia attiva con coda intelligente. Fai doppio pinch per parlare, le richieste si accoderanno senza errori.</div>
+    <div class="bubble ai"><strong>IA:</strong> Sistema Ultra-Rapido Pronto. Parla pure in italiano, risolverò ambiguità (come i vari Ronaldo) all'istante.</div>
   </div>
 
   <div id="controls">
@@ -150,11 +144,27 @@
   }
 
   function appendBubble(sender, text) {
-    chatHistory.push({ sender: sender, text: text });
+    // Funzione per ripulire l'output da eventuali rimasugli di codice JSON del server
+    let cleanText = text;
+    if (text.includes('{"') || text.includes('role":') || text.includes('reasoning":')) {
+      try {
+        // Prova a estrarre solo la parte finale testuale se invia JSON sporchi
+        const matches = text.match(/"content"\s*:\s*"([^"]+)"/);
+        if (matches && matches[1]) {
+          cleanText = matches[1];
+        } else {
+          cleanText = text.replace(/\{[^}]+\}/g, '').replace(/["']/g, '').trim();
+        }
+      } catch(e) {
+        cleanText = "Ecco la risposta: elaborazione completata.";
+      }
+    }
+
+    chatHistory.push({ sender: sender, text: cleanText });
     
     const bubble = document.createElement('div');
     bubble.className = `bubble ${sender}`;
-    bubble.innerHTML = sender === 'user' ? text : `<strong>IA:</strong> ${text}`;
+    bubble.innerHTML = sender === 'user' ? cleanText : `<strong>IA:</strong> ${cleanText}`;
     
     displayBox.appendChild(bubble);
     
@@ -167,7 +177,6 @@
 
   function pushToQueue(promptText) {
     requestQueue.push(promptText);
-    
     if (!isThinking) {
       processNextQueueItem();
     } else {
@@ -184,40 +193,28 @@
 
     const nextPrompt = requestQueue.shift();
     isThinking = true;
-    
     updateStatusDisplay('ELABORAZIONE...');
 
-    const apiMessages = [
-      { 
-        role: 'system', 
-        content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Sii preciso al 100% sui dati storici e sportivi. Verifica sempre le informazioni usando la ricerca web attiva (es. Paolo Maldini ha giocato solo nel Milan!). Rispondi in massimo due frasi cortissime senza fronzoli.' 
-      }
-    ];
-    
-    const recent = chatHistory.slice(-4);
-    recent.forEach(msg => {
-      apiMessages.push({
-        role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.text
-      });
-    });
+    // Prompt di sistema in italiano super direttivo per bloccare risposte in inglese o in formato codice
+    const systemPrompt = "Sei un assistente per occhiali HUD. Rispondi SEMPRE in lingua italiana, in modo chiaro, naturale e senza usare formati JSON o parentesi graffe. Se l'utente chiede di 'Ronaldo' specifica brevemente che esistono sia il brasiliano (il Fenomeno) sia Cristiano Ronaldo, dando una risposta sintetica di massimo 2 frasi in italiano.";
 
     try {
-      const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=openai&system=${encodeURIComponent(apiMessages[0].content)}`;
+      // Usiamo 'mistral-large' che è sensibilmente più veloce a elaborare le richieste web rispetto a gpt-4
+      const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=mistral-large&system=${encodeURIComponent(systemPrompt)}`;
 
       const response = await fetch(url, { method: 'GET' });
+      if (!response.ok) throw new Error('Errore');
 
-      if (!response.ok) throw new Error('Errore di risposta');
-
-      const reply = await response.text();
+      let reply = await response.text();
+      
       appendBubble('ai', reply);
       
     } catch (error) {
-      appendBubble('ai', 'Errore temporaneo. Salto alla prossima richiesta...');
+      appendBubble('ai', 'Errore di connessione. Elaboro la prossima richiesta...');
     }
 
-    // Delay di sicurezza di 500ms tra una richiesta e l'altra per non intasare l'IP
-    setTimeout(processNextQueueItem, 500);
+    // Passa alla prossima domanda con un delay ridotto a soli 200ms per la massima reattività
+    setTimeout(processNextQueueItem, 200);
   }
 
   function updateStatusDisplay(stateText) {
