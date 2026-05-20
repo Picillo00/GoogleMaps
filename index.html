@@ -88,4 +88,204 @@
     100% { transform: scale(0.9); opacity: 0.6; }
   }
   @keyframes fadeIn {
-    from { opacity
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-height: 360px) {
+    .bubble { font-size: 14px; padding: 8px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <div id="status-bar" class="state-ready">
+    <div class="dot"></div>
+    <span id="status-text">PRONTO</span>
+  </div>
+
+  <div id="display-box">
+    <div class="bubble ai"><strong>IA:</strong> Ciao! Cronologia attiva con coda intelligente. Fai doppio pinch per parlare, le richieste si accoderanno senza errori.</div>
+  </div>
+
+  <div id="controls">
+    <b>Doppio Pinch:</b> Parla • <b>Pinch Singolo:</b> Giù • <b>Pinch Lungo:</b> Su
+  </div>
+</div>
+
+<script>
+(() => {
+  const statusBar = document.getElementById('status-bar');
+  const statusText = document.getElementById('status-text');
+  const displayBox = document.getElementById('display-box');
+
+  let recognition;
+  let isListening = false;
+  let isThinking = false; 
+  
+  let chatHistory = []; 
+  let requestQueue = []; 
+
+  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.lang = 'it-IT';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      isListening = true;
+      updateStatusDisplay('ASCOLTO...');
+    };
+
+    recognition.onerror = () => resetStatus();
+    recognition.onend = () => { isListening = false; };
+
+    recognition.onresult = (event) => {
+      const textSpoken = event.results[0][0].transcript;
+      appendBubble('user', textSpoken);
+      pushToQueue(textSpoken);
+    };
+  }
+
+  function appendBubble(sender, text) {
+    chatHistory.push({ sender: sender, text: text });
+    
+    const bubble = document.createElement('div');
+    bubble.className = `bubble ${sender}`;
+    bubble.innerHTML = sender === 'user' ? text : `<strong>IA:</strong> ${text}`;
+    
+    displayBox.appendChild(bubble);
+    
+    setTimeout(() => {
+      displayBox.scrollTop = displayBox.scrollHeight;
+    }, 50);
+
+    resetStatus();
+  }
+
+  function pushToQueue(promptText) {
+    requestQueue.push(promptText);
+    
+    if (!isThinking) {
+      processNextQueueItem();
+    } else {
+      updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
+    }
+  }
+
+  async function processNextQueueItem() {
+    if (requestQueue.length === 0) {
+      isThinking = false;
+      resetStatus();
+      return;
+    }
+
+    const nextPrompt = requestQueue.shift();
+    isThinking = true;
+    
+    updateStatusDisplay('ELABORAZIONE...');
+
+    const apiMessages = [
+      { 
+        role: 'system', 
+        content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Sii preciso al 100% sui dati storici e sportivi. Verifica sempre le informazioni usando la ricerca web attiva (es. Paolo Maldini ha giocato solo nel Milan!). Rispondi in massimo due frasi cortissime senza fronzoli.' 
+      }
+    ];
+    
+    const recent = chatHistory.slice(-4);
+    recent.forEach(msg => {
+      apiMessages.push({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      });
+    });
+
+    try {
+      const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=openai&system=${encodeURIComponent(apiMessages[0].content)}`;
+
+      const response = await fetch(url, { method: 'GET' });
+
+      if (!response.ok) throw new Error('Errore di risposta');
+
+      const reply = await response.text();
+      appendBubble('ai', reply);
+      
+    } catch (error) {
+      appendBubble('ai', 'Errore temporaneo. Salto alla prossima richiesta...');
+    }
+
+    // Delay di sicurezza di 500ms tra una richiesta e l'altra per non intasare l'IP
+    setTimeout(processNextQueueItem, 500);
+  }
+
+  function updateStatusDisplay(stateText) {
+    if (stateText.includes('ASCOLTO')) statusBar.className = 'state-listening';
+    else if (stateText.includes('ELABORAZIONE') || stateText.includes('CODA')) statusBar.className = 'state-thinking';
+    else statusBar.className = 'state-ready';
+    
+    statusText.textContent = stateText;
+  }
+
+  function resetStatus() {
+    if (requestQueue.length > 0) {
+      updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
+    } else {
+      updateStatusDisplay('PRONTO');
+    }
+  }
+
+  function scrollChatDown() { displayBox.scrollBy({ top: 100, behavior: 'smooth' }); }
+  function scrollChatUp() { displayBox.scrollBy({ top: -100, behavior: 'smooth' }); }
+
+  function toggleListening() {
+    if (!recognition) return;
+    if (isListening) recognition.stop(); else recognition.start();
+  }
+
+  let lastClickTime = 0;
+  let longTimer = null;
+  let isLongAction = false;
+  const DOUBLE_DELAY = 280;
+  const LONG_DELAY = 450;
+
+  document.addEventListener('pointerdown', (e) => {
+    isLongAction = false;
+    clearTimeout(longTimer);
+    longTimer = setTimeout(() => {
+      isLongAction = true;
+      scrollChatUp();
+    }, LONG_DELAY);
+  });
+
+  document.addEventListener('pointerup', (e) => {
+    clearTimeout(longTimer);
+    if (isLongAction) return;
+
+    const now = Date.now();
+    if (now - lastClickTime < DOUBLE_DELAY) {
+      lastClickTime = 0;
+      toggleListening();
+      if(e) e.preventDefault();
+      return;
+    }
+
+    lastClickTime = now;
+    setTimeout(() => {
+      if (lastClickTime !== now) return;
+      lastClickTime = 0;
+      scrollChatDown();
+    }, DOUBLE_DELAY);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { e.preventDefault(); toggleListening(); }
+    if (e.key === 'ArrowDown') { scrollChatDown(); }
+    if (e.key === 'ArrowUp') { scrollChatUp(); }
+  });
+
+})();
+</script>
+</body>
+</html>
