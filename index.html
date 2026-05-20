@@ -185,7 +185,6 @@
 
     const nextPrompt = requestQueue.shift();
     
-																								 
     if (nextPrompt === "__CANCELLED__") {
       setTimeout(processNextQueueItem, 50);
       return;
@@ -219,7 +218,6 @@
       let reply = await response.text();
       reply = reply.trim();
       
-											   
       if (reply.startsWith('{') || reply.includes('"reasoning"')) {
          try {
              const jsonObj = JSON.parse(reply);
@@ -239,18 +237,14 @@
       appendBubble('ai', 'Ricerca in corso troppo complessa. Ripeti in modo più semplice.');
     }
 
-															  
     setTimeout(processNextQueueItem, 500);
   }
 
-														
   function removeLastUserRequest() {
-																		 
     if (requestQueue.length > 0) {
       requestQueue.pop(); 
     } 
     
-																					
     const userBubbles = displayBox.querySelectorAll('.bubble.user');
     if (userBubbles.length > 0) {
       const lastUserBubble = userBubbles[userBubbles.length - 1];
@@ -293,9 +287,12 @@
 
   let lastClickTime = 0;
   let longTimer = null;
+  let scrollTimer = null; // Gestione separata per bloccare lo scroll singolo in caso di doppio pinch neurale
   let isLongAction = false;
-  const DOUBLE_DELAY = 280;
-  const LONG_DELAY = 450;
+  
+  /* TIMING OTTIMIZZATI BANDA NEURALE (EMG) */
+  const DOUBLE_DELAY = 420; // Alzato a 420ms per compensare la latenza di calcolo del bracciale
+  const LONG_DELAY = 500;   
 
   /* EVENTI DI SWIPE (GESTURE) */
   let touchStartX = 0;
@@ -314,7 +311,6 @@
     const distX = touch.pageX - touchStartX;
     const distY = touch.pageY - touchStartY;
 
-																	 
     if (distX >= SWIPE_THRESHOLD && Math.abs(distY) <= SWIPE_RESTRAINT) {
       removeLastUserRequest();
       if(e.cancelable) e.preventDefault();
@@ -338,26 +334,34 @@
 
     const now = Date.now();
     
-    /* ADATTAMENTO PER BANDA NEURALE: 
-       Se l'OS rileva un doppio click nativo (e.detail === 2) attiva l'ascolto bypassando il timer manuale */
-    if (e.detail === 2 || (now - lastClickTime < DOUBLE_DELAY)) {
+    // Intercettazione combinata: dettaglio nativo OS o finestra temporale estesa per EMG
+    if (e.detail === 2 || (lastClickTime > 0 && (now - lastClickTime < DOUBLE_DELAY))) {
       lastClickTime = 0;
+      clearTimeout(scrollTimer); // Impedisce al primo pinch di far scorrere la pagina
       toggleListening();
-      if(e) e.preventDefault();
+      if(e.cancelable) e.preventDefault();
       return;
     }
 
     lastClickTime = now;
-    setTimeout(() => {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
       if (lastClickTime !== now) return;
       lastClickTime = 0;
       scrollChatDown();
     }, DOUBLE_DELAY);
   });
 
+  /* INTERCETTAZIONE DOPPIO CLICK NATIVO GENERATO DAL SYSTEM LAYER DI META */
+  document.addEventListener('dblclick', (e) => {
+    clearTimeout(scrollTimer);
+    lastClickTime = 0;
+    toggleListening();
+    if(e.cancelable) e.preventDefault();
+  });
+
   /* CONTROLLI DA TASTIERA PC / COMANDI DI SELEZIONE SMART GLASSES */
   window.addEventListener('keydown', (e) => {
-    /* ADATTAMENTO PER BANDA NEURALE: Mappato anche il tasto 'Enter' oltre a 'Space' */
     if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); toggleListening(); }
     if (e.key === 'ArrowDown') { scrollChatDown(); }
     if (e.key === 'ArrowUp') { scrollChatUp(); }
