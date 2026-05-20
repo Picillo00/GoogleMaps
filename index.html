@@ -348,23 +348,29 @@
       return;
     }
 
-    // SCUDO ATOMICO: Se l'API sta elaborando un comando start/stop, ignora i nuovi comandi
     if (isTransitioning) return;
-    
-    isTransitioning = true; // Blocca ulteriori esecuzioni
+    isTransitioning = true; 
 
     if (isListening) {
       try {
         recognition.stop();
       } catch(e) {
-        isTransitioning = false; // Sblocca in caso di errore
+        isTransitioning = false;
       }
     } else {
       updateStatusDisplay('INIZIALIZZAZIONE...');
       try {
         recognition.start();
-        // Failsafe: sblocca lo scudo dopo 1 secondo se la WebView si blocca senza lanciare eventi
-        setTimeout(() => { isTransitioning = false; }, 1000); 
+        
+        // NUOVO FAILSAFE VISIVO PER GLI OCCHIALI
+        setTimeout(() => { 
+          if (isTransitioning && !isListening) {
+            isTransitioning = false;
+            updateStatusDisplay('ERRORE: PERMESSI O HTTPS MANCANTI');
+            setTimeout(() => { resetStatus(); }, 2000);
+          }
+        }, 2000); // Se dopo 2 secondi l'onstart non ha risposto, sblocca la schermata
+        
       } catch(e) {
         updateStatusDisplay('ERRORE AVVIO: ' + e.message);
         isTransitioning = false;
