@@ -4,251 +4,190 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD Navigator</title>
+<title>HUD Live Dashboard</title>
 <style>
   :root {
-    --bg: #000000;
-    --text-main: #ffffff;
-    --text-dim: #888888;
-    --accent: #4285F4; /* Blu stile Google Maps */
-    --accent-green: #34A853;
-    --accent-red: #EA4335;
+    --bg: #000;
+    --text: #fff;
+    --dim: #888;
+    --accent: #00e5ff; /* Ciano brillante per HUD */
+    --bitcoin: #f7931a;
+    --weather: #ffcc00;
   }
   
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
   
-  html, body {
-    margin: 0; padding: 0; height: 100%; 
-    background: var(--bg); color: var(--text-main);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  body, html {
+    margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
     overflow: hidden; touch-action: none;
   }
 
   #wrap {
-    position: fixed; inset: 0; display: flex; flex-direction: column;
-    padding: 15px; text-align: center; justify-content: space-between;
+    display: flex; flex-direction: column; height: 100%; padding: 20px;
+    justify-content: center; align-items: center; text-align: center;
   }
 
-  /* Header: info generali del viaggio */
   #header {
-    display: flex; justify-content: space-between; align-items: center;
-    font-size: 14px; font-weight: 600; padding: 5px 10px;
-    background: rgba(255,255,255,0.1); border-radius: 20px;
-  }
-  #header .eta { color: var(--accent-green); }
-
-  /* Centro: Freccia gigante e distanza */
-  #main-instruction {
-    flex-grow: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    transition: transform 0.3s ease, opacity 0.3s ease;
-  }
-  #arrow {
-    font-size: 100px; /* Freccia enorme per visibilità istantanea */
-    line-height: 1;
-    color: var(--accent);
-    margin-bottom: 10px;
-  }
-  #distance {
-    font-size: 42px; font-weight: 800; letter-spacing: -1px;
+    position: absolute; top: 15px; width: 100%; text-align: center;
+    font-size: 12px; font-weight: bold; color: var(--dim); letter-spacing: 2px;
   }
 
-  /* Footer: Nome della via */
-  #footer {
-    font-size: 20px; font-weight: 500;
-    background: var(--accent); color: #000;
-    padding: 8px 15px; border-radius: 12px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* Contenitore della scheda dati */
+  #data-card {
+    background: rgba(20, 20, 20, 0.8);
+    border: 1px solid #333;
+    border-radius: 20px;
+    padding: 24px;
+    width: 100%;
+    max-width: 400px;
+    transition: all 0.3s ease;
   }
 
-  /* Modalità secondaria (riepilogo) attivata col doppio click */
-  #overview {
-    display: none; flex-grow: 1; flex-direction: column;
-    align-items: center; justify-content: center;
-  }
-  #overview h2 { font-size: 24px; color: var(--text-dim); margin: 0 0 10px 0; }
-  #overview .stats { font-size: 36px; font-weight: bold; }
+  .icon { font-size: 40px; margin-bottom: 10px; }
+  .title { font-size: 14px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+  .value { font-size: 32px; font-weight: 800; margin: 5px 0; color: var(--text); }
+  .subtitle { font-size: 14px; color: var(--accent); }
 
-  /* Overlay di avvio */
-  #overlay {
-    position: absolute; inset: 0; background: var(--bg);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    z-index: 10; padding: 20px; text-align: center;
-  }
-  #overlay h1 { font-size: 28px; margin: 0 0 10px 0; color: var(--accent); }
-  #overlay p { font-size: 14px; color: var(--text-dim); margin-bottom: 20px; }
-  .btn {
-    background: var(--accent); color: #fff; border: none;
-    padding: 12px 24px; font-size: 16px; font-weight: bold;
-    border-radius: 25px; cursor: pointer;
-  }
-  .hidden { display: none !important; }
+  /* Stati specifici */
+  .type-crypto .value { color: var(--bitcoin); }
+  .type-weather .value { color: var(--weather); }
+  .type-quote .value { font-size: 20px; font-style: italic; color: #fff; }
 
-  /* Adattamento per display piccolissimi (Ray-Ban Meta) */
-  @media (max-height: 400px) {
-    #arrow { font-size: 70px; margin-bottom: 5px; }
-    #distance { font-size: 32px; }
-    #footer { font-size: 16px; padding: 6px 12px; }
-    #header { font-size: 12px; }
+  /* Controlli in basso */
+  #controls {
+    position: absolute; bottom: 15px; font-size: 11px; color: #555;
   }
+
+  /* Animazione caricamento */
+  .loading { animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
 </style>
 </head>
 <body>
 
 <div id="wrap">
-  <div id="header">
-    <span id="time-left">12 min</span>
-    <span class="eta" id="eta-time">18:45</span>
+  <div id="header">LIVE DATA HUB</div>
+
+  <div id="data-card" class="loading">
+    <div class="icon">📡</div>
+    <div class="title">Connessione web...</div>
+    <div class="value">Scaricando</div>
+    <div class="subtitle">Attendere</div>
   </div>
 
-  <!-- Vista Principale: Istruzioni Turn-by-Turn -->
-  <div id="main-instruction">
-    <div id="arrow">⬆️</div>
-    <div id="distance">200 m</div>
-  </div>
-
-  <!-- Vista Secondaria: Riepilogo -->
-  <div id="overview">
-    <h2>Riepilogo Viaggio</h2>
-    <div class="stats" id="total-dist">4.2 km</div>
-    <div style="color: var(--accent-green); font-size: 20px; margin-top:5px;">Destinazione: Duomo</div>
-  </div>
-
-  <div id="footer">Via Roma</div>
-</div>
-
-<div id="overlay">
-  <h1>HUD NAV</h1>
-  <p><b>1 Pinch</b> = Prossima curva (Simulazione)<br>
-     <b>Doppio Pinch</b> = Cambia visuale<br>
-     <b>Pinch Lungo</b> = Arresta
-  </p>
-  <button class="btn" id="startBtn">AVVIA PERCORSO</button>
+  <div id="controls"><b>Pinch:</b> Scorri • <b>Doppio:</b> Aggiorna dati</div>
 </div>
 
 <script>
 (() => {
-  // Dati di simulazione del percorso
-  const routeSteps = [
-    { arrow: "⬆️", dist: "300 m", street: "Via Roma", color: "#4285F4" },
-    { arrow: "↗️", dist: "50 m", street: "Mantieni la destra", color: "#4285F4" },
-    { arrow: "➡️", dist: "10 m", street: "Via Milano", color: "#F4B400" },
-    { arrow: "⬆️", dist: "800 m", street: "Via Milano", color: "#4285F4" },
-    { arrow: "⬅️", dist: "150 m", street: "Piazza Garibaldi", color: "#F4B400" },
-    { arrow: "📍", dist: "0 m", street: "Sei arrivato", color: "#34A853" }
-  ];
+  // Qui salveremo i dati scaricati dal web
+  let dashboardData = [];
+  let currentIndex = 0;
+  
+  const cardEl = document.getElementById('data-card');
 
-  let currentStep = 0;
-  let isNavigating = false;
-  let showOverview = false;
+  // 1. Funzione per scaricare il prezzo del Bitcoin
+  async function fetchCrypto() {
+    try {
+      const res = await fetch('https://api.coindesk.com/v1/bpi/currentprice/EUR.json');
+      const data = await res.json();
+      return {
+        type: 'crypto',
+        icon: '₿',
+        title: 'Bitcoin (BTC)',
+        value: '€' + Math.round(data.bpi.EUR.rate_float).toLocaleString('it-IT'),
+        subtitle: 'Ultimo aggiornamento live'
+      };
+    } catch(e) { return null; }
+  }
 
-  // Elementi DOM
-  const overlay = document.getElementById('overlay');
-  const arrowEl = document.getElementById('arrow');
-  const distanceEl = document.getElementById('distance');
-  const footerEl = document.getElementById('footer');
-  const mainView = document.getElementById('main-instruction');
-  const overviewView = document.getElementById('overview');
-  const startBtn = document.getElementById('startBtn');
+  // 2. Funzione per scaricare il Meteo (Impostato su coordinate generiche, es. Napoli/Roma)
+  async function fetchWeather() {
+    try {
+      // Coordinate di Napoli: lat=40.85, lon=14.26
+      const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=40.85&longitude=14.26&current_weather=true');
+      const data = await res.json();
+      const temp = Math.round(data.current_weather.temperature);
+      return {
+        type: 'weather',
+        icon: temp > 20 ? '☀️' : '☁️',
+        title: 'Meteo Attuale',
+        value: temp + ' °C',
+        subtitle: 'Vento: ' + data.current_weather.windspeed + ' km/h'
+      };
+    } catch(e) { return null; }
+  }
 
-  function updateUI() {
-    if (currentStep >= routeSteps.length) return;
+  // 3. Funzione per scaricare una frase del giorno
+  async function fetchQuote() {
+    try {
+      const res = await fetch('https://dummyjson.com/quotes/random');
+      const data = await res.json();
+      return {
+        type: 'quote',
+        icon: '💬',
+        title: 'Frase del giorno',
+        value: `"${data.quote}"`,
+        subtitle: '- ' + data.author
+      };
+    } catch(e) { return null; }
+  }
+
+  // Motore principale: Scarica tutto in parallelo
+  async function loadAllData() {
+    cardEl.className = 'loading';
+    cardEl.innerHTML = `<div class="icon">⏳</div><div class="title">Sincronizzazione API</div><div class="value">Attendere...</div>`;
     
-    const step = routeSteps[currentStep];
+    // Esegue le tre chiamate web contemporaneamente
+    const results = await Promise.all([fetchCrypto(), fetchWeather(), fetchQuote()]);
     
-    // Anima la transizione
-    mainView.style.opacity = 0;
+    // Filtra eventuali errori (se un'API va offline)
+    dashboardData = results.filter(item => item !== null);
+    
+    if (dashboardData.length > 0) {
+      currentIndex = 0;
+      renderCard();
+    } else {
+      cardEl.innerHTML = `<div class="title">Errore di rete</div><div class="value">Offline</div>`;
+    }
+  }
+
+  // Mostra i dati a schermo
+  function renderCard() {
+    if (dashboardData.length === 0) return;
+    const item = dashboardData[currentIndex];
+    
+    // Effetto dissolvenza
+    cardEl.style.opacity = 0;
     setTimeout(() => {
-      arrowEl.textContent = step.arrow;
-      distanceEl.textContent = step.dist;
-      footerEl.textContent = step.street;
-      arrowEl.style.color = step.color;
-      
-      if(step.arrow === "📍") {
-        footerEl.style.background = "#34A853";
-        footerEl.style.color = "#fff";
-      } else {
-        footerEl.style.background = "var(--accent)";
-        footerEl.style.color = "#000";
-      }
-      mainView.style.opacity = 1;
-    }, 150);
+      cardEl.className = 'type-' + item.type;
+      cardEl.innerHTML = `
+        <div class="icon">${item.icon}</div>
+        <div class="title">${item.title}</div>
+        <div class="value">${item.value}</div>
+        <div class="subtitle">${item.subtitle}</div>
+      `;
+      cardEl.style.opacity = 1;
+    }, 200);
   }
 
-  function startNavigation() {
-    currentStep = 0;
-    isNavigating = true;
-    showOverview = false;
-    overlay.classList.add('hidden');
-    toggleView(false);
-    updateUI();
+  // --- AZIONI DEL BRACCIALE NEURAL-BAND ---
+  
+  function nextSlide() {
+    if (dashboardData.length === 0) return;
+    currentIndex = (currentIndex + 1) % dashboardData.length;
+    renderCard();
   }
 
-  function stopNavigation() {
-    isNavigating = false;
-    overlay.classList.remove('hidden');
-    overlay.querySelector('h1').textContent = "NAV INTERROTTA";
-  }
-
-  function nextStep() {
-    if (!isNavigating) return;
-    if (showOverview) { toggleView(false); return; } // Se è nel riepilogo, un click lo riporta alla navigazione
-    
-    if (currentStep < routeSteps.length - 1) {
-      currentStep++;
-      updateUI();
-    } else {
-      stopNavigation();
-      overlay.querySelector('h1').textContent = "ARRIVATO!";
-    }
-  }
-
-  function toggleView(forceOverview) {
-    if (!isNavigating) return;
-    showOverview = forceOverview !== undefined ? forceOverview : !showOverview;
-    
-    if (showOverview) {
-      mainView.style.display = 'none';
-      footerEl.style.display = 'none';
-      overviewView.style.display = 'flex';
-    } else {
-      mainView.style.display = 'flex';
-      footerEl.style.display = 'block';
-      overviewView.style.display = 'none';
-    }
-  }
-
-  // ------ INPUT GESTION (Neural-Band compatibile) ------
   let lastClickTime = 0;
-  let touchStartTs = 0;
-  let longPinchTimeout = null;
-  let isLongPinch = false;
-  const DOUBLE_DELAY = 280; 
-  const LONG_DELAY = 400;
 
-  function handleActionStart() {
-    touchStartTs = Date.now();
-    isLongPinch = false;
-    
-    clearTimeout(longPinchTimeout);
-    if (isNavigating) {
-      longPinchTimeout = setTimeout(() => {
-        isLongPinch = true;
-        stopNavigation(); // Click lungo = ferma navigazione
-      }, LONG_DELAY);
-    }
-  }
-
-  function handleActionEnd(e) {
-    clearTimeout(longPinchTimeout);
-    if (isLongPinch) return;
-    
+  function handlePointerUp(e) {
     const now = Date.now();
-    if (now - lastClickTime < DOUBLE_DELAY) {
-      // Doppio click
-      lastClickTime = 0; 
-      if (!isNavigating) startNavigation();
-      else toggleView();
+    if (now - lastClickTime < 300) {
+      // Doppio Pinch: Forza un nuovo download dei dati dal web
+      lastClickTime = 0;
+      loadAllData();
       if(e) e.preventDefault();
       return;
     }
@@ -257,34 +196,21 @@
     setTimeout(() => {
       if (lastClickTime !== now) return; 
       lastClickTime = 0;
-      
-      if (!isNavigating) startNavigation();
-      else nextStep(); // Click singolo = passo successivo
-    }, DOUBLE_DELAY);
+      // Pinch Singolo: Scorri alla prossima scheda
+      nextSlide(); 
+    }, 300);
   }
 
-  // Event Listeners
-  document.addEventListener('pointerdown', (e) => { 
-    if(e.target === startBtn) return;
-    e.preventDefault(); handleActionStart(); 
-  }, { passive:false });
-  
-  document.addEventListener('pointerup', (e) => { 
-    if(e.target === startBtn) return;
-    e.preventDefault(); handleActionEnd(e); 
-  }, { passive:false });
+  document.addEventListener('pointerup', handlePointerUp);
 
-  startBtn.addEventListener('click', startNavigation);
-
-  // Tastiera PC desktop per testare
+  // Fallback per tastiera
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') { 
-      e.preventDefault(); 
-      if (!isNavigating) startNavigation(); else nextStep(); 
-    }
-    if (e.key === 'v' || e.key === 'V') { toggleView(); } // Simula doppio click
-    if (e.key === 'Escape') { stopNavigation(); } // Simula click lungo
+    if (e.code === 'Space') { e.preventDefault(); nextSlide(); }
+    if (e.key === 'r' || e.key === 'R') { loadAllData(); } // Simula il doppio pinch
   });
+
+  // Avvia il download dei dati appena apri la pagina
+  loadAllData();
 
 })();
 </script>
