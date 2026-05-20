@@ -102,7 +102,6 @@
     margin-top: 10px;
   }
 
-  /* STILE BOTTONI CON FOCUS EVIDENTE PER NEURAL BAND */
   button {
     border: 1px solid #555555;
     border-radius: 16px;
@@ -114,13 +113,13 @@
     background-color: #262626;
     color: #ffffff;
     transition: all 0.15s ease;
+    touch-action: manipulation;
   }
 
   button:active {
     transform: scale(0.95);
   }
 
-  /* PARLA: Colore di base e variazione quando la banda ci si posiziona sopra (Focus) */
   #btn-talk {
     border-color: #39ff14;
     color: #39ff14;
@@ -132,7 +131,6 @@
     box-shadow: 0 0 15px rgba(57, 255, 20, 0.6);
   }
 
-  /* ROLLOUT: Colore di base e variazione quando la banda ci si posiziona sopra (Focus) */
   #btn-rollout {
     border-color: #ff4a4a;
     color: #ff4a4a;
@@ -164,12 +162,19 @@
   </div>
 
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Ciao! Ho aggiunto l'evidenziazione automatica. Quando la banda si sposta sui pulsanti, cambieranno colore riempiendosi completamente per farti capire dove ti trovi.</div>
+    <div class="bubble ai"><strong>IA:</strong> Ciao! Ho mappato ogni tipo di evento possibile sul pinch (Touch, Pointer e Click). Prova a fare il pinch adesso mentre mi trovo in evidenza.</div>
   </div>
 
   <div class="buttons-menu">
-    <button id="btn-talk" onclick="handleTalkClick()">PARLA</button>
-    <button id="btn-rollout" onclick="handleRolloutClick()">ROLLOUT</button>
+    <button id="btn-talk" 
+            onclick="handleTalkClick(event)" 
+            onpointerdown="handleTalkClick(event)" 
+            ontouchstart="handleTalkClick(event)">PARLA</button>
+            
+    <button id="btn-rollout" 
+            onclick="handleRolloutClick(event)" 
+            onpointerdown="handleRolloutClick(event)" 
+            ontouchstart="handleRolloutClick(event)">ROLLOUT</button>
   </div>
 </div>
 
@@ -181,6 +186,7 @@
   let recognition;
   let isListening = false;
   let isThinking = false; 
+  let lastTriggerTime = 0; // Protezione anti-rimbalzo per input multipli simultanei
   
   let chatHistory = []; 
   let requestQueue = []; 
@@ -225,7 +231,6 @@
 
   function pushToQueue(promptText) {
     requestQueue.push(promptText);
-    
     if (!isThinking) {
       processNextQueueItem();
     } else {
@@ -241,7 +246,6 @@
     }
 
     const nextPrompt = requestQueue.shift();
-    
     if (nextPrompt === "__CANCELLED__") {
       setTimeout(processNextQueueItem, 50);
       return;
@@ -253,7 +257,7 @@
     const apiMessages = [
       { 
         role: 'system', 
-        content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Sii preciso al 100% sui dati storici e sportivi. Verifica sempre le informazioni usando la ricerca web attiva (es. Paolo Maldini ha giocato solo nel Milan!). Rispondi in massimo due frasi cortissime senza fronzoli. Rispondi SEMPRE e SOLO con testo semplice in italiano. Non restituire MAI codice JSON, reasoning o tool_calls.' 
+        content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Sii preciso al 100% sui dati storici e sportivi. Verifica sempre le informazioni usando la ricerca web attiva. Rispondi in massimo due frasi cortissime senza fronzoli. Rispondi SEMPRE e SOLO con testo semplice in italiano. Non restituire MAI codice JSON, reasoning o tool_calls.' 
       }
     ];
     
@@ -267,9 +271,7 @@
 
     try {
       const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=openai&system=${encodeURIComponent(apiMessages[0].content)}`;
-
       const response = await fetch(url, { method: 'GET' });
-
       if (!response.ok) throw new Error('Errore di risposta');
 
       let reply = await response.text();
@@ -289,7 +291,6 @@
       }
 
       appendBubble('ai', reply);
-      
     } catch (error) {
       appendBubble('ai', 'Ricerca in corso troppo complessa. Ripeti in modo più semplice.');
     }
@@ -314,7 +315,6 @@
         }
       }
     }
-    
     resetStatus();
   }
 
@@ -339,16 +339,27 @@
     if (isListening) recognition.stop(); else recognition.start();
   }
 
-  function handleTalkClick() {
+  /* GESTORI DI INPUT COMPATIBILI AL 100% CON IL PINCH EMULATO */
+  function handleTalkClick(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    const now = Date.now();
+    if (now - lastTriggerTime < 300) return; // Evita attivazioni doppie istantanee (de-bounce)
+    lastTriggerTime = now;
+    
     toggleListening();
   }
 
-  function handleRolloutClick() {
+  function handleRolloutClick(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    const now = Date.now();
+    if (now - lastTriggerTime < 300) return;
+    lastTriggerTime = now;
+    
     removeLastUserRequest();
   }
 
+  /* EMULAZIONE SELEZIONE DA TASTIERA (SE IL BRACCIALE INVIA INVIO/SPAZIO SUL FOCUS) */
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); toggleListening(); }
     if (e.key === 'ArrowDown') { displayBox.scrollBy({ top: 100, behavior: 'smooth' }); }
     if (e.key === 'ArrowUp') { displayBox.scrollBy({ top: -100, behavior: 'smooth' }); }
     if (e.key === 'Backspace' || e.key === 'Delete') { removeLastUserRequest(); }
