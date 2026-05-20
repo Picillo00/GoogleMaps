@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>HUD Navigator</title>
+<style>
+  :root {
+    --bg: #000000;
+    --text-main: #ffffff;
+    --text-dim: #888888;
+    --accent: #4285F4; /* Blu stile Google Maps */
+    --accent-green: #34A853;
+    --accent-red: #EA4335;
+  }
+  
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  
+  html, body {
+    margin: 0; padding: 0; height: 100%; 
+    background: var(--bg); color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden; touch-action: none;
+  }
+
+  #wrap {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    padding: 15px; text-align: center; justify-content: space-between;
+  }
+
+  /* Header: info generali del viaggio */
+  #header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 14px; font-weight: 600; padding: 5px 10px;
+    background: rgba(255,255,255,0.1); border-radius: 20px;
+  }
+  #header .eta { color: var(--accent-green); }
+
+  /* Centro: Freccia gigante e distanza */
+  #main-instruction {
+    flex-grow: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  #arrow {
+    font-size: 100px; /* Freccia enorme per visibilità istantanea */
+    line-height: 1;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  #distance {
+    font-size: 42px; font-weight: 800; letter-spacing: -1px;
+  }
+
+  /* Footer: Nome della via */
+  #footer {
+    font-size: 20px; font-weight: 500;
+    background: var(--accent); color: #000;
+    padding: 8px 15px; border-radius: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* Modalità secondaria (riepilogo) attivata col doppio click */
+  #overview {
+    display: none; flex-grow: 1; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  #overview h2 { font-size: 24px; color: var(--text-dim); margin: 0 0 10px 0; }
+  #overview .stats { font-size: 36px; font-weight: bold; }
+
+  /* Overlay di avvio */
+  #overlay {
+    position: absolute; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 10; padding: 20px; text-align: center;
+  }
+  #overlay h1 { font-size: 28px; margin: 0 0 10px 0; color: var(--accent); }
+  #overlay p { font-size: 14px; color: var(--text-dim); margin-bottom: 20px; }
+  .btn {
+    background: var(--accent); color: #fff; border: none;
+    padding: 12px 24px; font-size: 16px; font-weight: bold;
+    border-radius: 25px; cursor: pointer;
+  }
+  .hidden { display: none !important; }
+
+  /* Adattamento per display piccolissimi (Ray-Ban Meta) */
+  @media (max-height: 400px) {
+    #arrow { font-size: 70px; margin-bottom: 5px; }
+    #distance { font-size: 32px; }
+    #footer { font-size: 16px; padding: 6px 12px; }
+    #header { font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <div id="header">
+    <span id="time-left">12 min</span>
+    <span class="eta" id="eta-time">18:45</span>
+  </div>
+
+  <!-- Vista Principale: Istruzioni Turn-by-Turn -->
+  <div id="main-instruction">
+    <div id="arrow">⬆️</div>
+    <div id="distance">200 m</div>
+  </div>
+
+  <!-- Vista Secondaria: Riepilogo -->
+  <div id="overview">
+    <h2>Riepilogo Viaggio</h2>
+    <div class="stats" id="total-dist">4.2 km</div>
+    <div style="color: var(--accent-green); font-size: 20px; margin-top:5px;">Destinazione: Duomo</div>
+  </div>
+
+  <div id="footer">Via Roma</div>
+</div>
+
+<div id="overlay">
+  <h1>HUD NAV</h1>
+  <p><b>1 Pinch</b> = Prossima curva (Simulazione)<br>
+     <b>Doppio Pinch</b> = Cambia visuale<br>
+     <b>Pinch Lungo</b> = Arresta
+  </p>
+  <button class="btn" id="startBtn">AVVIA PERCORSO</button>
+</div>
+
+<script>
+(() => {
+  // Dati di simulazione del percorso
+  const routeSteps = [
+    { arrow: "⬆️", dist: "300 m", street: "Via Roma", color: "#4285F4" },
+    { arrow: "↗️", dist: "50 m", street: "Mantieni la destra", color: "#4285F4" },
+    { arrow: "➡️", dist: "10 m", street: "Via Milano", color: "#F4B400" },
+    { arrow: "⬆️", dist: "800 m", street: "Via Milano", color: "#4285F4" },
+    { arrow: "⬅️", dist: "150 m", street: "Piazza Garibaldi", color: "#F4B400" },
+    { arrow: "📍", dist: "0 m", street: "Sei arrivato", color: "#34A853" }
+  ];
+
+  let currentStep = 0;
+  let isNavigating = false;
+  let showOverview = false;
+
+  // Elementi DOM
+  const overlay = document.getElementById('overlay');
+  const arrowEl = document.getElementById('arrow');
+  const distanceEl = document.getElementById('distance');
+  const footerEl = document.getElementById('footer');
+  const mainView = document.getElementById('main-instruction');
+  const overviewView = document.getElementById('overview');
+  const startBtn = document.getElementById('startBtn');
+
+  function updateUI() {
+    if (currentStep >= routeSteps.length) return;
+    
+    const step = routeSteps[currentStep];
+    
+    // Anima la transizione
+    mainView.style.opacity = 0;
+    setTimeout(() => {
+      arrowEl.textContent = step.arrow;
+      distanceEl.textContent = step.dist;
+      footerEl.textContent = step.street;
+      arrowEl.style.color = step.color;
+      
+      if(step.arrow === "📍") {
+        footerEl.style.background = "#34A853";
+        footerEl.style.color = "#fff";
+      } else {
+        footerEl.style.background = "var(--accent)";
+        footerEl.style.color = "#000";
+      }
+      mainView.style.opacity = 1;
+    }, 150);
+  }
+
+  function startNavigation() {
+    currentStep = 0;
+    isNavigating = true;
+    showOverview = false;
+    overlay.classList.add('hidden');
+    toggleView(false);
+    updateUI();
+  }
+
+  function stopNavigation() {
+    isNavigating = false;
+    overlay.classList.remove('hidden');
+    overlay.querySelector('h1').textContent = "NAV INTERROTTA";
+  }
+
+  function nextStep() {
+    if (!isNavigating) return;
+    if (showOverview) { toggleView(false); return; } // Se è nel riepilogo, un click lo riporta alla navigazione
+    
+    if (currentStep < routeSteps.length - 1) {
+      currentStep++;
+      updateUI();
+    } else {
+      stopNavigation();
+      overlay.querySelector('h1').textContent = "ARRIVATO!";
+    }
+  }
+
+  function toggleView(forceOverview) {
+    if (!isNavigating) return;
+    showOverview = forceOverview !== undefined ? forceOverview : !showOverview;
+    
+    if (showOverview) {
+      mainView.style.display = 'none';
+      footerEl.style.display = 'none';
+      overviewView.style.display = 'flex';
+    } else {
+      mainView.style.display = 'flex';
+      footerEl.style.display = 'block';
+      overviewView.style.display = 'none';
+    }
+  }
+
+  // ------ INPUT GESTION (Neural-Band compatibile) ------
+  let lastClickTime = 0;
+  let touchStartTs = 0;
+  let longPinchTimeout = null;
+  let isLongPinch = false;
+  const DOUBLE_DELAY = 280; 
+  const LONG_DELAY = 400;
+
+  function handleActionStart() {
+    touchStartTs = Date.now();
+    isLongPinch = false;
+    
+    clearTimeout(longPinchTimeout);
+    if (isNavigating) {
+      longPinchTimeout = setTimeout(() => {
+        isLongPinch = true;
+        stopNavigation(); // Click lungo = ferma navigazione
+      }, LONG_DELAY);
+    }
+  }
+
+  function handleActionEnd(e) {
+    clearTimeout(longPinchTimeout);
+    if (isLongPinch) return;
+    
+    const now = Date.now();
+    if (now - lastClickTime < DOUBLE_DELAY) {
+      // Doppio click
+      lastClickTime = 0; 
+      if (!isNavigating) startNavigation();
+      else toggleView();
+      if(e) e.preventDefault();
+      return;
+    }
+    
+    lastClickTime = now;
+    setTimeout(() => {
+      if (lastClickTime !== now) return; 
+      lastClickTime = 0;
+      
+      if (!isNavigating) startNavigation();
+      else nextStep(); // Click singolo = passo successivo
+    }, DOUBLE_DELAY);
+  }
+
+  // Event Listeners
+  document.addEventListener('pointerdown', (e) => { 
+    if(e.target === startBtn) return;
+    e.preventDefault(); handleActionStart(); 
+  }, { passive:false });
+  
+  document.addEventListener('pointerup', (e) => { 
+    if(e.target === startBtn) return;
+    e.preventDefault(); handleActionEnd(e); 
+  }, { passive:false });
+
+  startBtn.addEventListener('click', startNavigation);
+
+  // Tastiera PC desktop per testare
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { 
+      e.preventDefault(); 
+      if (!isNavigating) startNavigation(); else nextStep(); 
+    }
+    if (e.key === 'v' || e.key === 'V') { toggleView(); } // Simula doppio click
+    if (e.key === 'Escape') { stopNavigation(); } // Simula click lungo
+  });
+
+})();
+</script>
+</body>
+</html>
