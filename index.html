@@ -342,7 +342,7 @@
     }
   }
 
-  function toggleListening() {
+  async function toggleListening() {
     if (!recognition) {
       appendBubble('ai', 'Riconoscimento vocale non supportato sulla WebView.');
       return;
@@ -359,17 +359,29 @@
       }
     } else {
       updateStatusDisplay('INIZIALIZZAZIONE...');
+      
+      try {
+        // FORZATURA HARDWARE: Chiede l'accesso al flusso audio grezzo per "svegliare" il microfono Meta
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // Chiudiamo subito il flusso temporaneo, ci serviva solo a forzare il popup dei permessi
+          stream.getTracks().forEach(track => track.stop());
+        }
+      } catch (mediaError) {
+        console.log("Sveglia hardware fallita o rifiutata:", mediaError);
+      }
+
       try {
         recognition.start();
         
-        // NUOVO FAILSAFE VISIVO PER GLI OCCHIALI
+        // Failsafe visivo se l'onstart non risponde
         setTimeout(() => { 
           if (isTransitioning && !isListening) {
             isTransitioning = false;
             updateStatusDisplay('ERRORE: PERMESSI O HTTPS MANCANTI');
             setTimeout(() => { resetStatus(); }, 2000);
           }
-        }, 2000); // Se dopo 2 secondi l'onstart non ha risposto, sblocca la schermata
+        }, 2500); 
         
       } catch(e) {
         updateStatusDisplay('ERRORE AVVIO: ' + e.message);
