@@ -21,7 +21,7 @@
   body, html {
     margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overflow: hidden; touch-action: none;
+    overflow: hidden; touch-action: manipulation;
   }
 
   #wrap {
@@ -41,11 +41,12 @@
   .state-thinking .dot { background: #f4b400; animation: pulse 1s infinite; }
   .state-ready .dot { background: var(--user-color); }
 
-  /* Area Chat: Lista verticale a scorrimento style WhatsApp */
+  /* Area Chat: Permette lo scorrimento verticale libero (Swipe alto/basso) */
   #display-box {
     flex-grow: 1; display: flex; flex-direction: column;
-    gap: 12px; padding: 10px 0; overflow-y: scroll;
+    gap: 12px; padding: 10px 0; overflow-y: auto;
     scroll-behavior: smooth;
+    touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
   }
   /* Nasconde la barra di scorrimento per estetica HUD */
@@ -78,6 +79,28 @@
   }
   .bubble.ai strong { color: var(--ai-color); }
 
+  /* NUOVO MENU HUD INFERIORE INTERATTIVO */
+  #menu-bar {
+    display: flex; gap: 10px; padding: 6px 0; background: var(--bg); z-index: 15;
+  }
+  .menu-btn {
+    flex: 1; padding: 12px; background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--dim); border-radius: 8px; color: var(--text);
+    font-weight: bold; font-size: 14px; letter-spacing: 1px; cursor: pointer;
+    text-align: center; transition: background 0.1s ease;
+  }
+  #btn-talk {
+    border-color: var(--user-color); color: var(--user-color);
+    background: rgba(57, 255, 20, 0.02);
+  }
+  #btn-talk:active { background: rgba(57, 255, 20, 0.15); }
+  
+  #btn-rollout {
+    border-color: #ff3b3b; color: #ff3b3b;
+    background: rgba(255, 59, 59, 0.02);
+  }
+  #btn-rollout:active { background: rgba(255, 59, 59, 0.15); }
+
   #controls {
     font-size: 10px; color: var(--dim); text-align: center;
     border-top: 1px solid #111; padding-top: 6px; background: var(--bg);
@@ -95,6 +118,7 @@
 
   @media (max-height: 360px) {
     .bubble { font-size: 14px; padding: 8px 12px; }
+    .menu-btn { padding: 8px; font-size: 12px; }
   }
 </style>
 </head>
@@ -107,11 +131,16 @@
   </div>
 
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Ciao! Cronologia attiva con coda intelligente. Fai doppio pinch per parlare, le richieste si accoderanno senza errori. Swipe a destra per cancellare l'ultima domanda.</div>
+    <div class="bubble ai"><strong>IA:</strong> Ciao! Cronologia attiva con coda intelligente. Usa i pulsanti del menu in basso per interagire. Trascina la schermata verso l'alto o il basso per scorrere l'intera conversazione.</div>
+  </div>
+
+  <div id="menu-bar">
+    <button id="btn-talk" class="menu-btn">PARLA</button>
+    <button id="btn-rollout" class="menu-btn">ROLLOUT</button>
   </div>
 
   <div id="controls">
-    <b>Doppio Pinch:</b> Parla • <b>Pinch Singolo:</b> Giù • <b>Pinch Lungo:</b> Su • <b>Swipe DX:</b> Cancella
+    <b>Menu HUD:</b> Clicca i pulsanti • <b>Scorrimento:</b> Swipe verticale sulla chat per leggere tutto
   </div>
 </div>
 
@@ -120,6 +149,8 @@
   const statusBar = document.getElementById('status-bar');
   const statusText = document.getElementById('status-text');
   const displayBox = document.getElementById('display-box');
+  const btnTalk = document.getElementById('btn-talk');
+  const btnRollout = document.getElementById('btn-rollout');
 
   let recognition;
   let isListening = false;
@@ -159,6 +190,7 @@
     
     displayBox.appendChild(bubble);
     
+    // Auto-scroll verso il basso solo alla ricezione di nuovi messaggi
     setTimeout(() => {
       displayBox.scrollTop = displayBox.scrollHeight;
     }, 50);
@@ -277,90 +309,26 @@
     }
   }
 
-  function scrollChatDown() { displayBox.scrollBy({ top: 100, behavior: 'smooth' }); }
-  function scrollChatUp() { displayBox.scrollBy({ top: -100, behavior: 'smooth' }); }
-
   function toggleListening() {
     if (!recognition) return;
     if (isListening) recognition.stop(); else recognition.start();
   }
 
-  let lastClickTime = 0;
-  let longTimer = null;
-  let scrollTimer = null; // Gestione separata per bloccare lo scroll singolo in caso di doppio pinch neurale
-  let isLongAction = false;
-  
-  /* TIMING OTTIMIZZATI BANDA NEURALE (EMG) */
-  const DOUBLE_DELAY = 420; // Alzato a 420ms per compensare la latenza di calcolo del bracciale
-  const LONG_DELAY = 500;   
-
-  /* EVENTI DI SWIPE (GESTURE) */
-  let touchStartX = 0;
-  let touchStartY = 0;
-  const SWIPE_THRESHOLD = 60;
-  const SWIPE_RESTRAINT = 40;
-
-  document.addEventListener('touchstart', (e) => {
-    const touch = e.changedTouches[0];
-    touchStartX = touch.pageX;
-    touchStartY = touch.pageY;
-  }, { passive: true });
-
-  document.addEventListener('touchend', (e) => {
-    const touch = e.changedTouches[0];
-    const distX = touch.pageX - touchStartX;
-    const distY = touch.pageY - touchStartY;
-
-    if (distX >= SWIPE_THRESHOLD && Math.abs(distY) <= SWIPE_RESTRAINT) {
-      removeLastUserRequest();
-      if(e.cancelable) e.preventDefault();
-      return;
-    }
-  }, { passive: false });
-
-  /* PINCH EMULATION (POINTER EVENTS) */
-  document.addEventListener('pointerdown', (e) => {
-    isLongAction = false;
-    clearTimeout(longTimer);
-    longTimer = setTimeout(() => {
-      isLongAction = true;
-      scrollChatUp();
-    }, LONG_DELAY);
-  });
-
-  document.addEventListener('pointerup', (e) => {
-    clearTimeout(longTimer);
-    if (isLongAction) return;
-
-    const now = Date.now();
-    
-    // Intercettazione combinata: dettaglio nativo OS o finestra temporale estesa per EMG
-    if (e.detail === 2 || (lastClickTime > 0 && (now - lastClickTime < DOUBLE_DELAY))) {
-      lastClickTime = 0;
-      clearTimeout(scrollTimer); // Impedisce al primo pinch di far scorrere la pagina
-      toggleListening();
-      if(e.cancelable) e.preventDefault();
-      return;
-    }
-
-    lastClickTime = now;
-    clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(() => {
-      if (lastClickTime !== now) return;
-      lastClickTime = 0;
-      scrollChatDown();
-    }, DOUBLE_DELAY);
-  });
-
-  /* INTERCETTAZIONE DOPPIO CLICK NATIVO GENERATO DAL SYSTEM LAYER DI META */
-  document.addEventListener('dblclick', (e) => {
-    clearTimeout(scrollTimer);
-    lastClickTime = 0;
+  /* ATTIVAZIONE TRAMITE PULSANTI DEL MENU (OTTIMIZZATO PER BANDA NEURALE) */
+  btnTalk.addEventListener('click', (e) => {
+    e.preventDefault();
     toggleListening();
-    if(e.cancelable) e.preventDefault();
   });
 
-  /* CONTROLLI DA TASTIERA PC / COMANDI DI SELEZIONE SMART GLASSES */
+  btnRollout.addEventListener('click', (e) => {
+    e.preventDefault();
+    removeLastUserRequest();
+  });
+
+  /* FUNZIONI DI SCORRIMENTO MANUALE DA TASTIERA PC */
+  function scrollChatDown() { displayBox.scrollBy({ top: 100, behavior: 'smooth' }); }
+  function scrollChatUp() { displayBox.scrollBy({ top: -100, behavior: 'smooth' }); }
+
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); toggleListening(); }
     if (e.key === 'ArrowDown') { scrollChatDown(); }
