@@ -2,9 +2,9 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=yes">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD WhatsApp Style Chat with Queue</title>
+<title>HUD WhatsApp Style Chat with Neural Lock</title>
 <link rel="icon" type="image/png" href="preview.png.jpg">
 <style>
   * {
@@ -15,24 +15,26 @@
   }
 
   body {
-    background-color: #0a0a0a;
+    background-color: #020205;
     color: #ffffff;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
     padding: 12px;
+    overflow: hidden;
+    user-select: none;
   }
 
   .chat-container {
-    background: #141414;
+    background: #05050a;
     width: 100%;
     max-width: 360px;
     height: 85vh;
     border-radius: 24px;
     padding: 16px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    border: 1px solid #222;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+    border: 2px solid #0b0b14;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -47,13 +49,13 @@
     align-items: center;
     gap: 6px;
     padding-bottom: 10px;
-    border-bottom: 1px solid #222;
+    border-bottom: 1px solid #1a1a26;
   }
   
   .dot { width: 8px; height: 8px; border-radius: 50%; background: #555555; }
   .state-listening .dot { background: #ff3b3b; animation: pulse 1s infinite; }
   .state-thinking .dot { background: #f4b400; animation: pulse 1s infinite; }
-  .state-ready .dot { background: #39ff14; }
+  .state-ready .dot { background: #00ffaa; }
 
   #display-box {
     flex-grow: 1;
@@ -63,7 +65,6 @@
     padding: 14px 0;
     overflow-y: auto;
     scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
   }
   #display-box::-webkit-scrollbar { display: none; }
 
@@ -79,9 +80,9 @@
 
   .bubble.user {
     align-self: flex-end;
-    background: rgba(57, 255, 20, 0.08);
-    border: 1px solid #39ff14;
-    color: #39ff14;
+    background: rgba(0, 255, 170, 0.08);
+    border: 1px solid #00ffaa;
+    color: #00ffaa;
     border-bottom-right-radius: 4px;
     font-style: italic;
   }
@@ -102,44 +103,41 @@
     margin-top: 10px;
   }
 
-  button {
-    border: 1px solid #555555;
+  /* STRUTTURA BOTTONI SULLO STILE DI PICILLO CHESS */
+  .menu-btn {
     border-radius: 16px;
     height: 55px;
     font-size: 1.1rem;
     font-weight: bold;
     letter-spacing: 1px;
     cursor: pointer;
-    background-color: #262626;
-    color: #ffffff;
-    transition: all 0.15s ease;
-    touch-action: manipulation;
+    transition: all 0.1s ease;
+    outline: none;
+    box-sizing: border-box;
   }
 
-  button:active {
-    transform: scale(0.95);
+  @keyframes pulse-focus {
+    0% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; }
+    50% { box-shadow: inset 0 0 0 4px #ffff00, 0 0 20px #ffff00; }
+    100% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; }
+  }
+
+  /* EFFETTO DI HIGHLIGHT IDENTICO AL TUO NEURAL LOCK */
+  .menu-btn:focus {
+    animation: pulse-focus 0.6s infinite;
+    z-index: 100;
   }
 
   #btn-talk {
-    border-color: #39ff14;
-    color: #39ff14;
-    background: rgba(57, 255, 20, 0.03);
-  }
-  #btn-talk:hover, #btn-talk:focus {
-    background-color: #39ff14;
-    color: #000000;
-    box-shadow: 0 0 15px rgba(57, 255, 20, 0.6);
+    border: 1px solid #00ffaa;
+    color: #00ffaa;
+    background: rgba(0, 255, 170, 0.05);
   }
 
   #btn-rollout {
-    border-color: #ff4a4a;
-    color: #ff4a4a;
-    background: rgba(58, 26, 26, 0.2);
-  }
-  #btn-rollout:hover, #btn-rollout:focus {
-    background-color: #ff4a4a;
-    color: #000000;
-    box-shadow: 0 0 15px rgba(255, 74, 74, 0.6);
+    border: 1px solid #ff0044;
+    color: #ff0044;
+    background: rgba(255, 0, 68, 0.05);
   }
 
   @keyframes pulse {
@@ -162,19 +160,12 @@
   </div>
 
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Ciao! Ho mappato ogni tipo di evento possibile sul pinch (Touch, Pointer e Click). Prova a fare il pinch adesso mentre mi trovo in evidenza.</div>
+    <div class="bubble ai"><strong>IA:</strong> Sistema allineato con l'architettura Hardware Lock di Picillo Chess. Fai il pinch sul bottone evidenziato per testare la risposta della Neural Band.</div>
   </div>
 
   <div class="buttons-menu">
-    <button id="btn-talk" 
-            onclick="handleTalkClick(event)" 
-            onpointerdown="handleTalkClick(event)" 
-            ontouchstart="handleTalkClick(event)">PARLA</button>
-            
-    <button id="btn-rollout" 
-            onclick="handleRolloutClick(event)" 
-            onpointerdown="handleRolloutClick(event)" 
-            ontouchstart="handleRolloutClick(event)">ROLLOUT</button>
+    <button id="btn-talk" class="menu-btn" tabIndex="0">PARLA</button>
+    <button id="btn-rollout" class="menu-btn" tabIndex="0">ROLLOUT</button>
   </div>
 </div>
 
@@ -182,11 +173,13 @@
   const statusBar = document.getElementById('status-bar');
   const statusText = document.getElementById('status-text');
   const displayBox = document.getElementById('display-box');
+  const btnTalk = document.getElementById('btn-talk');
+  const btnRollout = document.getElementById('btn-rollout');
 
   let recognition;
   let isListening = false;
   let isThinking = false; 
-  let lastTriggerTime = 0; // Protezione anti-rimbalzo per input multipli simultanei
+  let lastTriggerTime = 0; // Protezione anti-rimbalzo hardware
   
   let chatHistory = []; 
   let requestQueue = []; 
@@ -339,31 +332,27 @@
     if (isListening) recognition.stop(); else recognition.start();
   }
 
-  /* GESTORI DI INPUT COMPATIBILI AL 100% CON IL PINCH EMULATO */
-  function handleTalkClick(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
+  /* LOGICA DI CLICK STRUTTURATA SUL MODELLO DI PICILLO CHESS */
+  btnTalk.onclick = (e) => {
+    e.preventDefault();
     const now = Date.now();
-    if (now - lastTriggerTime < 300) return; // Evita attivazioni doppie istantanee (de-bounce)
+    if (now - lastTriggerTime < 300) return; // Antirimbalzo hardware
     lastTriggerTime = now;
     
     toggleListening();
-  }
+  };
 
-  function handleRolloutClick(e) {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
+  btnRollout.onclick = (e) => {
+    e.preventDefault();
     const now = Date.now();
     if (now - lastTriggerTime < 300) return;
     lastTriggerTime = now;
     
     removeLastUserRequest();
-  }
+  };
 
-  /* EMULAZIONE SELEZIONE DA TASTIERA (SE IL BRACCIALE INVIA INVIO/SPAZIO SUL FOCUS) */
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') { displayBox.scrollBy({ top: 100, behavior: 'smooth' }); }
-    if (e.key === 'ArrowUp') { displayBox.scrollBy({ top: -100, behavior: 'smooth' }); }
-    if (e.key === 'Backspace' || e.key === 'Delete') { removeLastUserRequest(); }
-  });
+  // Focus automatico sul primo tasto all'avvio per agganciare subito la neural band
+  setTimeout(() => { btnTalk.focus(); }, 300);
 </script>
 </body>
 </html>
