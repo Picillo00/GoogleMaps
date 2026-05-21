@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD AI - GitHub Safe</title>
+<title>HUD AI - P2P Version</title>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
   body { background-color: #020205; color: #ffffff; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 12px; overflow: hidden; user-select: none; }
@@ -37,7 +38,7 @@
     <span id="status-text">AVVIO...</span>
   </div>
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Sistema caricato da GitHub. Attendo connessione al server...</div>
+    <div class="bubble ai"><strong>IA:</strong> Sistema P2P caricato. Attendo connessione all'iPhone...</div>
   </div>
   <div class="buttons-menu">
     <button id="btn-talk" class="menu-btn" tabIndex="0">PARLA</button>
@@ -52,55 +53,67 @@
   const btnTalk = document.getElementById('btn-talk');
   const btnRollout = document.getElementById('btn-rollout');
 
-  let isListening = false;
   let isThinking = false; 
   let lastTriggerTime = 0; 
   let chatHistory = []; 
   let requestQueue = []; 
 
   // ==========================================
-  // LETTURA URL PRIVATO IN MODO SICURO
-  // Il codice legge "ws" dall'URL (es. ?ws=wss://tuo-server.com)
-  // Così nessun dato privato finisce su GitHub.
+  // PEER-TO-PEER CONNESSIONE DIRETTA
+  // Legge il parametro "?room=TUA_PAROLA" dall'URL
   // ==========================================
   const urlParams = new URLSearchParams(window.location.search);
-  const wsUrl = urlParams.get('ws'); 
-  let ws;
+  const roomName = urlParams.get('room'); 
+  let peer;
+  let conn;
 
-  function initWebSocket() {
-    if (!wsUrl) {
-      updateStatusDisplay('ERRORE URL WS');
-      appendBubble('ai', 'Per usare la voce, aggiungi <strong>?ws=wss://tuo-server</strong> alla fine dell\'URL nelle impostazioni di Meta.');
+  function initP2P() {
+    if (!roomName) {
+      updateStatusDisplay('ERRORE URL');
+      appendBubble('ai', 'Per collegarti all\'iPhone, aggiungi <strong>?room=TUA_PAROLA</strong> alla fine dell\'URL nell\'app Meta.');
       return;
     }
 
-    ws = new WebSocket(wsUrl);
-    
-    ws.onopen = () => {
+    // Inizializza il client P2P
+    peer = new Peer(); 
+
+    peer.on('open', (id) => {
+      // Quando il peer è pronto, si connette all'iPhone che ha come ID la tua "Stanza Segreta"
+      const targetId = 'iphone-' + roomName;
+      updateStatusDisplay('CERCO IPHONE...');
+      connectToiPhone(targetId);
+    });
+
+    peer.on('error', (err) => {
+      updateStatusDisplay('ERRORE P2P');
+    });
+  }
+
+  function connectToiPhone(targetId) {
+    conn = peer.connect(targetId);
+
+    conn.on('open', () => {
       updateStatusDisplay('PRONTO (CONNESSO)');
-      appendBubble('ai', 'Connessione stabilita in sicurezza. Sblocca Safari su iPhone per parlare.');
-    };
+      appendBubble('ai', 'Collegamento diretto con l\'iPhone stabilito. Sblocca il microfono su Safari.');
+    });
 
-    ws.onerror = () => {
-      updateStatusDisplay('ERRORE SERVER');
-      appendBubble('ai', 'Impossibile connettersi al server: ' + wsUrl);
-    };
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    conn.on('data', (data) => {
       if (data.type === 'transcript') {
-        isListening = false;
+        updateStatusDisplay('ELABORAZIONE...');
         appendBubble('user', data.text);
         pushToQueue(data.text);
       } else if (data.type === 'error') {
-        isListening = false;
         updateStatusDisplay('ERRORE MIC IPHONE');
         setTimeout(resetStatus, 2000);
       }
-    };
+    });
+
+    conn.on('close', () => {
+      updateStatusDisplay('IPHONE SCOLLEGATO');
+    });
   }
 
-  initWebSocket();
+  initP2P();
 
   // Logica Chat e UI
   function appendBubble(sender, text) {
@@ -119,7 +132,6 @@
     else updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
   }
 
-  // Chiamata IA a Pollinations (Nessuna chiave API necessaria, perfetto per GitHub)
   async function processNextQueueItem() {
     if (requestQueue.length === 0) { isThinking = false; resetStatus(); return; }
     const nextPrompt = requestQueue.shift();
@@ -172,20 +184,19 @@
 
   function resetStatus() {
     if (requestQueue.length > 0) updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
-    else updateStatusDisplay(wsUrl ? 'PRONTO' : 'MANCA URL WS');
+    else updateStatusDisplay(conn && conn.open ? 'PRONTO' : 'SCOLLEGATO');
   }
 
   // ==========================================
-  // CLICK SU "PARLA" PER ATTIVARE MIC IPHONE
+  // COMANDO P2P ALL'IPHONE
   // ==========================================
   function toggleListening() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      updateStatusDisplay('SERVER DISCONNESSO');
+    if (!conn || !conn.open) {
+      updateStatusDisplay('IPHONE DISCONNESSO');
       return;
     }
-    isListening = true;
     updateStatusDisplay('IN ASCOLTO (IPHONE)...');
-    ws.send(JSON.stringify({ type: 'start_listening' })); // Invia il comando di avvio mic
+    conn.send({ type: 'start_listening' }); 
   }
 
   function triggerTalk(e) {
