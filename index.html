@@ -3,223 +3,72 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#000000">
-<title>HUD Gaze-Typing & Neural Pinch</title>
+<title>HUD Speed Writer</title>
 <style>
-  :root {
-    --bg: #000000;
-    --text: #ffffff;
-    --dim: #555555;
-    --user-color: #39ff14; 
-    --ai-color: #00e5ff;   
-    --focus-color: #f4b400; /* Colore di puntamento oculare */
-  }
+  body { background: #000; color: #fff; font-family: sans-serif; margin: 0; overflow: hidden; }
+  #wrap { display: flex; flex-direction: column; height: 100vh; padding: 10px; }
   
-  * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
-  body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; overflow: hidden; }
+  /* Area Chat */
+  #display-box { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .bubble { padding: 10px; border-radius: 12px; font-size: 14px; border: 1px solid #333; max-width: 80%; }
+  .bubble.user { align-self: flex-end; background: #0a2a0a; color: #39ff14; }
   
-  #wrap { display: flex; flex-direction: column; height: 100%; padding: 12px; justify-content: space-between; }
-
-  #status-bar { font-size: 11px; font-weight: bold; color: var(--dim); letter-spacing: 2px; display: flex; align-items: center; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid #111; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--user-color); }
-  .state-thinking .dot { background: var(--focus-color); animation: pulse 1s infinite; }
-
-  #display-box { flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 10px 0; overflow-y: scroll; scroll-behavior: smooth; }
-  #display-box::-webkit-scrollbar { display: none; }
-
-  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.35; animation: fadeIn 0.2s ease forwards; word-wrap: break-word; }
-  .bubble.user { align-self: flex-end; background: rgba(57, 255, 20, 0.08); border: 1px solid var(--user-color); color: var(--user-color); border-bottom-right-radius: 4px; font-style: italic; }
-  .bubble.ai { align-self: flex-start; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.4); color: #f0f0f0; border-bottom-left-radius: 4px; }
-
-  /* ZONA TASTIERA QWERTY EYE-TRACKING */
-  .keyboard-zone { background: #050508; border: 1px solid #111; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-
-  #input-display { min-height: 40px; background: #0a0a12; border-radius: 8px; padding: 10px; font-size: 16px; font-weight: bold; color: #fff; border: 1px solid #222; display: flex; align-items: center; word-break: break-all; }
-  .cursor { display: inline-block; width: 8px; height: 16px; background: var(--user-color); margin-left: 4px; animation: blink 1s step-end infinite; }
-
-  .qwerty-grid { display: flex; flex-direction: column; gap: 6px; }
-  .qwerty-row { display: flex; justify-content: center; gap: 4px; }
+  /* Sistema a 4 Quadranti (Input Veloce) */
+  #quad-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px; height: 200px; }
+  .quad { border: 2px solid #222; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; border-radius: 10px; }
+  .active { border-color: #39ff14; background: #051505; box-shadow: 0 0 10px #39ff14; }
   
-  .key { 
-    flex: 1; text-align: center; padding: 12px 0; font-size: 16px; font-weight: bold; 
-    color: #8888aa; background: #0c0c14; border-radius: 8px; border: 1px solid #1a1a26; 
-    transition: all 0.1s ease; cursor: pointer; display: flex; justify-content: center; align-items: center;
-  }
-  
-  /* Effetto "Sguardo" (Hover) - Simula l'eye tracking */
-  .key:hover { background: var(--focus-color); color: #000; transform: scale(1.08); box-shadow: 0 0 15px rgba(244, 180, 0, 0.5); z-index: 10; border-color: var(--focus-color); }
-  /* Effetto "Pinch Neurale" (Active/Click) */
-  .key:active { transform: scale(0.95); background: var(--user-color); box-shadow: 0 0 20px var(--user-color); }
-
-  .key-action { color: #ff3b3b; font-size: 12px; }
-  .key-space { flex: 4; font-size: 12px; color: #fff;}
-  .key-send { flex: 2; background: rgba(57, 255, 20, 0.1); color: var(--user-color); border-color: var(--user-color); font-size: 12px; }
-  .key-send:hover { background: var(--user-color); color: #000; }
-
-  @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
-  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  #preview { padding: 10px; background: #111; font-weight: bold; font-size: 16px; margin-bottom: 5px; }
 </style>
 </head>
 <body>
 
 <div id="wrap">
-  <div id="status-bar" class="state-ready">
-    <div class="dot"></div>
-    <span id="status-text">GUARDA E FAI PINCH</span>
-  </div>
-
-  <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Gaze-Typing attivato. Guarda le lettere e stringi le dita per digitare a mano libera. Nessun limite di testo.</div>
-  </div>
-
-  <div class="keyboard-zone">
-    <div id="input-display"><span id="typed-text"></span><div class="cursor"></div></div>
-    
-    <div class="qwerty-grid">
-      <div class="qwerty-row">
-        <div class="key">Q</div><div class="key">W</div><div class="key">E</div><div class="key">R</div><div class="key">T</div><div class="key">Y</div><div class="key">U</div><div class="key">I</div><div class="key">O</div><div class="key">P</div>
-      </div>
-      <div class="qwerty-row">
-        <div class="key">A</div><div class="key">S</div><div class="key">D</div><div class="key">F</div><div class="key">G</div><div class="key">H</div><div class="key">J</div><div class="key">K</div><div class="key">L</div>
-      </div>
-      <div class="qwerty-row">
-        <div class="key">Z</div><div class="key">X</div><div class="key">C</div><div class="key">V</div><div class="key">B</div><div class="key">N</div><div class="key">M</div><div class="key key-action" id="key-del">⌫</div>
-      </div>
-      <div class="qwerty-row">
-        <div class="key key-action" id="key-clear">🧹</div>
-        <div class="key key-space" id="key-space">SPAZIO</div>
-        <div class="key key-send" id="key-send">🚀 INVIA</div>
-      </div>
-    </div>
+  <div id="preview">TESTO: <span id="text-out"></span></div>
+  <div id="display-box"></div>
+  <div id="quad-grid">
+    <div class="quad active" id="q0">A-F</div>
+    <div class="quad" id="q1">G-L</div>
+    <div class="quad" id="q2">M-R</div>
+    <div class="quad" id="q3">S-Z / INVIO</div>
   </div>
 </div>
 
 <script>
-(() => {
-  const displayBox = document.getElementById('display-box');
-  const typedText = document.getElementById('typed-text');
-  const statusBar = document.getElementById('status-bar');
-  const statusText = document.getElementById('status-text');
-  
   let currentText = "";
-  let requestQueue = [];
-  let isThinking = false;
-  let hoveredKey = null; // Traccia quale tasto stiamo "guardando"
+  let activeQuad = 0;
+  const quads = [ ["A","B","C","D","E","F"], ["G","H","I","J","K","L"], ["M","N","O","P","Q","R"], ["S","T","U","V","Z","🚀"] ];
 
-  // LOGICA DI DIGITAZIONE
-  function typeChar(char) {
-    currentText += char;
-    updateDisplay();
-  }
-
-  function deleteChar() {
-    currentText = currentText.slice(0, -1);
-    updateDisplay();
-  }
-
-  function clearText() {
-    currentText = "";
-    updateDisplay();
-  }
-
-  function updateDisplay() {
-    typedText.textContent = currentText;
-  }
-
-  // ASSEGNAZIONE EVENTI AI TASTI VISIVI (Il "Click" simula il Pinch Neurale)
-  document.querySelectorAll('.key').forEach(key => {
-    // Tracciamento finto per la pressione tramite barra spaziatrice
-    key.addEventListener('mouseenter', () => hoveredKey = key);
-    key.addEventListener('mouseleave', () => { if(hoveredKey === key) hoveredKey = null; });
-
-    key.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); // Evita ritardi su mobile/touch
-      handleKeyAction(key);
-    });
-  });
-
-  function handleKeyAction(keyElement) {
-    if (keyElement.id === 'key-del') deleteChar();
-    else if (keyElement.id === 'key-clear') clearText();
-    else if (keyElement.id === 'key-space') typeChar(" ");
-    else if (keyElement.id === 'key-send') executeFinalSend();
-    else typeChar(keyElement.textContent);
-  }
-
-  // SIMULAZIONE DEL PINCH CON LA TASTIERA FISICA DEL PC (Barra Spaziatrice)
+  // Sostituisci questo con l'evento del tuo bracciale (es: rotazione polso o pinch)
   window.addEventListener('keydown', (e) => {
-    // Se l'utente preme SPAZIO mentre "guarda" (hover) una lettera, viene digitata
-    if (e.code === 'Space' && hoveredKey && hoveredKey.id !== 'key-space') {
-      e.preventDefault();
-      handleKeyAction(hoveredKey);
-      
-      // Feedback visivo del pinch
-      hoveredKey.style.transform = 'scale(0.9)';
-      hoveredKey.style.background = 'var(--user-color)';
-      setTimeout(() => {
-        hoveredKey.style.transform = '';
-        hoveredKey.style.background = '';
-      }, 100);
-    } 
-    // Mappatura tastiera fisica standard per comodità di test
-    else if (e.key.length === 1 && e.key.match(/[a-zA-Z0-9 ]/)) { typeChar(e.key.toUpperCase()); }
-    else if (e.key === 'Backspace') { deleteChar(); }
-    else if (e.key === 'Enter') { executeFinalSend(); }
+    if (e.key === "ArrowRight") { activeQuad = (activeQuad + 1) % 4; updateUI(); }
+    if (e.key === "Enter") {
+      if(activeQuad === 3) {
+        // Logica invio
+        const lastVal = quads[activeQuad][5];
+        if(lastVal === "🚀") { sendText(); }
+      } else {
+        // Semplificazione: aggiunge una lettera fittizia per test
+        currentText += quads[activeQuad][0];
+        document.getElementById('text-out').textContent = currentText;
+      }
+    }
   });
 
-  // LOGICA DI INVIO E CODA
-  function executeFinalSend() {
-    if (currentText.trim() === "") return;
-    appendBubble('user', currentText.trim());
-    pushToQueue(currentText.trim());
-    clearText();
+  function updateUI() {
+    document.querySelectorAll('.quad').forEach((el, i) => {
+      el.className = i === activeQuad ? 'quad active' : 'quad';
+    });
   }
 
-  function appendBubble(sender, text) {
+  function sendText() {
     const bubble = document.createElement('div');
-    bubble.className = `bubble ${sender}`;
-    bubble.innerHTML = sender === 'user' ? text : `<strong>IA:</strong> ${text}`;
-    displayBox.appendChild(bubble);
-    setTimeout(() => { displayBox.scrollTop = displayBox.scrollHeight; }, 50);
+    bubble.className = 'bubble user';
+    bubble.textContent = currentText;
+    document.getElementById('display-box').appendChild(bubble);
+    currentText = "";
+    document.getElementById('text-out').textContent = "";
   }
-
-  function pushToQueue(promptText) {
-    requestQueue.push(promptText);
-    if (!isThinking) processNextQueueItem();
-    else updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
-  }
-
-  async function processNextQueueItem() {
-    if (requestQueue.length === 0) { 
-      isThinking = false; 
-      updateStatusDisplay('GUARDA E FAI PINCH'); 
-      return; 
-    }
-    
-    const nextPrompt = requestQueue.shift();
-    isThinking = true; 
-    updateStatusDisplay('ELABORAZIONE...');
-
-    const systemInstruction = 'Sei un assistente HUD per occhiali smart nel 2026. Rispondi in italiano. Sii conciso. Massimo due frasi. Non usare mai formattazione complessa.';
-    try {
-      const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=openai&system=${encodeURIComponent(systemInstruction)}`;
-      const response = await fetch(url);
-      let reply = (await response.text()).trim();
-      if (reply.startsWith('{')) { try { const j = JSON.parse(reply); if (j.content) reply = j.content; } catch(e){} }
-      appendBubble('ai', reply);
-    } catch (error) { 
-      appendBubble('ai', 'Errore di connessione.'); 
-    }
-    
-    setTimeout(processNextQueueItem, 400);
-  }
-
-  function updateStatusDisplay(stateText) {
-    statusBar.className = stateText.includes('ELABORAZIONE') ? 'state-thinking' : 'state-ready';
-    statusText.textContent = stateText;
-  }
-})();
 </script>
 </body>
 </html>
