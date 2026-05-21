@@ -4,162 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD WhatsApp Style Chat with Neural Lock</title>
+<title>HUD AI - GitHub Safe</title>
 <style>
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-
-  body {
-    background-color: #020205;
-    color: #ffffff;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    padding: 12px;
-    overflow: hidden;
-    user-select: none;
-  }
-
-  .chat-container {
-    background: #05050a;
-    width: 100%;
-    max-width: 360px;
-    height: 85vh;
-    border-radius: 24px;
-    padding: 16px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
-    border: 2px solid #0b0b14;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  #status-bar {
-    font-size: 11px;
-    font-weight: bold;
-    color: #555555;
-    letter-spacing: 2px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #1a1a26;
-  }
-  
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
+  body { background-color: #020205; color: #ffffff; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 12px; overflow: hidden; user-select: none; }
+  .chat-container { background: #05050a; width: 100%; max-width: 360px; height: 85vh; border-radius: 24px; padding: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9); border: 2px solid #0b0b14; display: flex; flex-direction: column; justify-content: space-between; }
+  #status-bar { font-size: 11px; font-weight: bold; color: #555555; letter-spacing: 2px; display: flex; align-items: center; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid #1a1a26; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: #555555; }
   .state-listening .dot { background: #ff3b3b; animation: pulse 1s infinite; }
   .state-thinking .dot { background: #f4b400; animation: pulse 1s infinite; }
   .state-ready .dot { background: #00ffaa; }
-
-  #display-box {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 14px 0;
-    overflow-y: auto;
-    scroll-behavior: smooth;
-  }
+  #display-box { flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 14px 0; overflow-y: auto; scroll-behavior: smooth; }
   #display-box::-webkit-scrollbar { display: none; }
-
-  .bubble {
-    max-width: 85%;
-    padding: 10px 14px;
-    border-radius: 16px;
-    font-size: 15px;
-    line-height: 1.35;
-    animation: fadeIn 0.2s ease forwards;
-    word-wrap: break-word;
-  }
-
-  .bubble.user {
-    align-self: flex-end;
-    background: rgba(0, 255, 170, 0.08);
-    border: 1px solid #00ffaa;
-    color: #00ffaa;
-    border-bottom-right-radius: 4px;
-    font-style: italic;
-  }
-
-  .bubble.ai {
-    align-self: flex-start;
-    background: rgba(0, 229, 255, 0.05);
-    border: 1px solid rgba(0, 229, 255, 0.4);
-    color: #f0f0f0;
-    border-bottom-left-radius: 4px;
-  }
+  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.35; animation: fadeIn 0.2s ease forwards; word-wrap: break-word; }
+  .bubble.user { align-self: flex-end; background: rgba(0, 255, 170, 0.08); border: 1px solid #00ffaa; color: #00ffaa; border-bottom-right-radius: 4px; font-style: italic; }
+  .bubble.ai { align-self: flex-start; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.4); color: #f0f0f0; border-bottom-left-radius: 4px; }
   .bubble.ai strong { color: #00e5ff; }
-
-  .buttons-menu {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    margin-top: 10px;
-  }
-
-  .menu-btn {
-    border-radius: 16px;
-    height: 55px;
-    font-size: 1.1rem;
-    font-weight: bold;
-    letter-spacing: 1px;
-    cursor: pointer;
-    transition: all 0.1s ease;
-    outline: none;
-    box-sizing: border-box;
-  }
-
-  @keyframes pulse-focus {
-    0% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; }
-    50% { box-shadow: inset 0 0 0 4px #ffff00, 0 0 20px #ffff00; }
-    100% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; }
-  }
-
-  .menu-btn:focus {
-    animation: pulse-focus 0.6s infinite;
-    z-index: 100;
-  }
-
-  #btn-talk {
-    border: 1px solid #00ffaa;
-    color: #00ffaa;
-    background: rgba(0, 255, 170, 0.05);
-  }
-
-  #btn-rollout {
-    border: 1px solid #ff0044;
-    color: #ff0044;
-    background: rgba(255, 0, 68, 0.05);
-  }
-
-  @keyframes pulse {
-    0% { transform: scale(0.9); opacity: 0.6; }
-    50% { transform: scale(1.1); opacity: 1; }
-    100% { transform: scale(0.9); opacity: 0.6; }
-  }
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
+  .buttons-menu { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 10px; }
+  .menu-btn { border-radius: 16px; height: 55px; font-size: 1.1rem; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: all 0.1s ease; outline: none; }
+  @keyframes pulse-focus { 0% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; } 50% { box-shadow: inset 0 0 0 4px #ffff00, 0 0 20px #ffff00; } 100% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; } }
+  .menu-btn:focus { animation: pulse-focus 0.6s infinite; z-index: 100; }
+  #btn-talk { border: 1px solid #00ffaa; color: #00ffaa; background: rgba(0, 255, 170, 0.05); }
+  #btn-rollout { border: 1px solid #ff0044; color: #ff0044; background: rgba(255, 0, 68, 0.05); }
+  @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.6; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.6; } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
-
 <div class="chat-container">
   <div id="status-bar" class="state-ready">
     <div class="dot"></div>
-    <span id="status-text">AVVIO CONNESSIONE...</span>
+    <span id="status-text">AVVIO...</span>
   </div>
-
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Sistema Ponte Inizializzato. Attendo connessione al server...</div>
+    <div class="bubble ai"><strong>IA:</strong> Sistema caricato da GitHub. Attendo connessione al server...</div>
   </div>
-
   <div class="buttons-menu">
     <button id="btn-talk" class="menu-btn" tabIndex="0">PARLA</button>
     <button id="btn-rollout" class="menu-btn" tabIndex="0">ROLLOUT</button>
@@ -180,35 +59,40 @@
   let requestQueue = []; 
 
   // ==========================================
-  // CONFIGURAZIONE WEBSOCKET PONTE
+  // LETTURA URL PRIVATO IN MODO SICURO
+  // Il codice legge "ws" dall'URL (es. ?ws=wss://tuo-server.com)
+  // Così nessun dato privato finisce su GitHub.
   // ==========================================
-  const wsUrl = 'wss://IL_TUO_SERVER.com'; // INSERISCI QUI IL TUO INDIRIZZO
+  const urlParams = new URLSearchParams(window.location.search);
+  const wsUrl = urlParams.get('ws'); 
   let ws;
 
   function initWebSocket() {
+    if (!wsUrl) {
+      updateStatusDisplay('ERRORE URL WS');
+      appendBubble('ai', 'Per usare la voce, aggiungi <strong>?ws=wss://tuo-server</strong> alla fine dell\'URL nelle impostazioni di Meta.');
+      return;
+    }
+
     ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
-      updateStatusDisplay('PRONTO (WS CONNESSO)');
-      appendBubble('ai', 'Connesso. Assicurati che Safari su iPhone sia sbloccato e in attesa.');
+      updateStatusDisplay('PRONTO (CONNESSO)');
+      appendBubble('ai', 'Connessione stabilita in sicurezza. Sblocca Safari su iPhone per parlare.');
     };
 
-    ws.onerror = (error) => {
-      updateStatusDisplay('ERRORE CONNESSIONE WS');
-      appendBubble('ai', 'Errore server ponte.');
+    ws.onerror = () => {
+      updateStatusDisplay('ERRORE SERVER');
+      appendBubble('ai', 'Impossibile connettersi al server: ' + wsUrl);
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      
-      // L'iPhone ci ha mandato la trascrizione dell'audio
       if (data.type === 'transcript') {
         isListening = false;
         appendBubble('user', data.text);
         pushToQueue(data.text);
-      }
-      // L'iPhone ha rilevato un errore
-      else if (data.type === 'error') {
+      } else if (data.type === 'error') {
         isListening = false;
         updateStatusDisplay('ERRORE MIC IPHONE');
         setTimeout(resetStatus, 2000);
@@ -216,109 +100,64 @@
     };
   }
 
-  // Avvia la connessione all'apertura dell'HUD
   initWebSocket();
 
+  // Logica Chat e UI
   function appendBubble(sender, text) {
     chatHistory.push({ sender: sender, text: text });
-    
     const bubble = document.createElement('div');
     bubble.className = `bubble ${sender}`;
     bubble.innerHTML = sender === 'user' ? text : `<strong>IA:</strong> ${text}`;
-    
     displayBox.appendChild(bubble);
-    
-    setTimeout(() => {
-      displayBox.scrollTop = displayBox.scrollHeight;
-    }, 50);
-
+    setTimeout(() => { displayBox.scrollTop = displayBox.scrollHeight; }, 50);
     resetStatus();
   }
 
   function pushToQueue(promptText) {
     requestQueue.push(promptText);
-    if (!isThinking) {
-      processNextQueueItem();
-    } else {
-      updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
-    }
+    if (!isThinking) processNextQueueItem();
+    else updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
   }
 
+  // Chiamata IA a Pollinations (Nessuna chiave API necessaria, perfetto per GitHub)
   async function processNextQueueItem() {
-    if (requestQueue.length === 0) {
-      isThinking = false;
-      resetStatus();
-      return;
-    }
-
+    if (requestQueue.length === 0) { isThinking = false; resetStatus(); return; }
     const nextPrompt = requestQueue.shift();
-    if (nextPrompt === "__CANCELLED__") {
-      setTimeout(processNextQueueItem, 50);
-      return;
-    }
+    if (nextPrompt === "__CANCELLED__") { setTimeout(processNextQueueItem, 50); return; }
 
     isThinking = true;
-    updateStatusDisplay('ELABORAZIONE...');
+    updateStatusDisplay('RICERCA WEB...');
 
-    const apiMessages = [
-      { 
-        role: 'system', 
-        content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Sii preciso al 100% sui dati storici e sportivi. Verifica sempre le informazioni usando la ricerca web attiva. Rispondi in massimo due frasi cortissime senza fronzoli. Rispondi SEMPRE e SOLO con testo semplice in italiano. Non restituire MAI codice JSON, reasoning o tool_calls.' 
-      }
-    ];
-    
-    const recent = chatHistory.slice(-4);
-    recent.forEach(msg => {
-      apiMessages.push({
-        role: msg.sender === 'user' ? 'user' : 'assistant',
-        content: msg.text
-      });
-    });
+    const apiMessages = [{ role: 'system', content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Verifica sempre le informazioni sul web. Rispondi in massimo due frasi cortissime. Solo testo semplice.' }];
+    chatHistory.slice(-4).forEach(msg => { apiMessages.push({ role: msg.sender === 'user' ? 'user' : 'assistant', content: msg.text }); });
 
     try {
       const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=openai&system=${encodeURIComponent(apiMessages[0].content)}`;
       const response = await fetch(url, { method: 'GET' });
-      if (!response.ok) throw new Error('Errore di risposta');
-
-      let reply = await response.text();
-      reply = reply.trim();
+      if (!response.ok) throw new Error('Errore');
+      let reply = (await response.text()).trim();
       
       if (reply.startsWith('{') || reply.includes('"reasoning"')) {
          try {
              const jsonObj = JSON.parse(reply);
-             if (jsonObj.content && jsonObj.content !== "") {
-                 reply = jsonObj.content;
-             } else {
-                 throw new Error("Solo log interno o reasoning rilevato");
-             }
-         } catch (e) {
-             reply = "Sto verificando i dati, puoi ripetere?";
-         }
+             if (jsonObj.content) reply = jsonObj.content;
+             else throw new Error("Log");
+         } catch (e) { reply = "Errore nel parsing, ripeti?"; }
       }
-
       appendBubble('ai', reply);
     } catch (error) {
-      appendBubble('ai', 'Ricerca in corso troppo complessa. Ripeti in modo più semplice.');
+      appendBubble('ai', 'Ricerca in corso troppo complessa. Ripeti.');
     }
-
     setTimeout(processNextQueueItem, 500);
   }
 
   function removeLastUserRequest() {
-    if (requestQueue.length > 0) {
-      requestQueue.pop(); 
-    } 
-    
+    if (requestQueue.length > 0) requestQueue.pop(); 
     const userBubbles = displayBox.querySelectorAll('.bubble.user');
     if (userBubbles.length > 0) {
-      const lastUserBubble = userBubbles[userBubbles.length - 1];
-      lastUserBubble.remove();
-      
+      userBubbles[userBubbles.length - 1].remove();
       for (let i = chatHistory.length - 1; i >= 0; i--) {
-        if (chatHistory[i].sender === 'user') {
-          chatHistory.splice(i, 1);
-          break;
-        }
+        if (chatHistory[i].sender === 'user') { chatHistory.splice(i, 1); break; }
       }
     }
     resetStatus();
@@ -326,34 +165,27 @@
 
   function updateStatusDisplay(stateText) {
     if (stateText.includes('IPHONE')) statusBar.className = 'state-listening';
-    else if (stateText.includes('ELABORAZIONE') || stateText.includes('CODA')) statusBar.className = 'state-thinking';
+    else if (stateText.includes('RICERCA') || stateText.includes('CODA')) statusBar.className = 'state-thinking';
     else statusBar.className = 'state-ready';
-    
     statusText.textContent = stateText;
   }
 
   function resetStatus() {
-    if (requestQueue.length > 0) {
-      updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
-    } else {
-      updateStatusDisplay('PRONTO');
-    }
+    if (requestQueue.length > 0) updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
+    else updateStatusDisplay(wsUrl ? 'PRONTO' : 'MANCA URL WS');
   }
 
   // ==========================================
-  // INVIO COMANDO DI ASCOLTO ALL'IPHONE
+  // CLICK SU "PARLA" PER ATTIVARE MIC IPHONE
   // ==========================================
   function toggleListening() {
-    if (ws.readyState !== WebSocket.OPEN) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
       updateStatusDisplay('SERVER DISCONNESSO');
       return;
     }
-    
     isListening = true;
     updateStatusDisplay('IN ASCOLTO (IPHONE)...');
-    
-    // Manda all'iPhone l'ordine di aprire il microfono
-    ws.send(JSON.stringify({ type: 'start_listening' }));
+    ws.send(JSON.stringify({ type: 'start_listening' })); // Invia il comando di avvio mic
   }
 
   function triggerTalk(e) {
@@ -361,7 +193,6 @@
     const now = Date.now();
     if (now - lastTriggerTime < 300) return; 
     lastTriggerTime = now;
-    
     toggleListening();
   }
 
@@ -370,29 +201,18 @@
     const now = Date.now();
     if (now - lastTriggerTime < 300) return;
     lastTriggerTime = now;
-    
     removeLastUserRequest();
   }
 
   btnTalk.addEventListener('click', triggerTalk);
   btnTalk.addEventListener('touchstart', triggerTalk);
-  btnTalk.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ' || e.keyCode === 13 || e.keyCode === 32) {
-      triggerTalk(e);
-    }
-  });
+  btnTalk.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') triggerTalk(e); });
 
   btnRollout.addEventListener('click', triggerRollout);
   btnRollout.addEventListener('touchstart', triggerRollout);
-  btnRollout.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ' || e.keyCode === 13 || e.keyCode === 32) {
-      triggerRollout(e);
-    }
-  });
+  btnRollout.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') triggerRollout(e); });
 
-  setTimeout(() => { 
-    btnTalk.focus(); 
-  }, 500);
+  setTimeout(() => { btnTalk.focus(); }, 500);
 </script>
 </body>
 </html>
