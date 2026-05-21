@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD AI - Context Sniper</title>
+<title>HUD AI - Decision Tree Keyboard</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
   body { background-color: #020205; color: #ffffff; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 12px; overflow: hidden; user-select: none; }
@@ -21,7 +21,6 @@
   
   #display-box { flex-grow: 1; display: flex; flex-direction: column; gap: 10px; padding: 10px 0; overflow-y: auto; scroll-behavior: smooth; border-radius: 8px; transition: all 0.2s ease; }
   #display-box::-webkit-scrollbar { display: none; }
-  
   .chat-scrolling #display-box { background: rgba(0, 229, 255, 0.03); }
 
   .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.35; animation: fadeIn 0.2s ease forwards; word-wrap: break-word; }
@@ -29,7 +28,8 @@
   .bubble.ai { align-self: flex-start; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.4); color: #f0f0f0; border-bottom-left-radius: 4px; }
   .bubble.ai strong { color: #00e5ff; }
 
-  .neural-matrix-zone { background: #07070f; border: 1px solid #141426; border-radius: 18px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  /* ZONA TASTIERA / MENU */
+  .neural-matrix-zone { background: #07070f; border: 1px solid #141426; border-radius: 18px; padding: 8px; display: flex; flex-direction: column; gap: 8px; transition: opacity 0.2s ease; }
   .chat-scrolling .neural-matrix-zone { opacity: 0.3; }
 
   #text-preview-container { min-height: 38px; border-bottom: 1px dashed #222; padding-bottom: 4px; display: flex; flex-wrap: wrap; align-items: center; }
@@ -38,12 +38,13 @@
 
   .matrix-grid { display: flex; flex-direction: column; gap: 4px; }
   .matrix-row { display: flex; gap: 4px; padding: 2px; }
-  .matrix-cell { flex: 1; text-align: center; padding: 6px 2px; font-size: 11px; font-weight: bold; color: #444466; background: #0c0c17; border-radius: 4px; transition: all 0.1s ease; white-space: nowrap; overflow: hidden; }
+  .matrix-cell { flex: 1; text-align: center; padding: 6px 2px; font-size: 12px; font-weight: bold; color: #444466; background: #0c0c17; border-radius: 4px; transition: all 0.1s ease; white-space: nowrap; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 32px; }
   
-  .matrix-cell.cell-focused { background: #00ffaa !important; color: #000000 !important; font-size: 12px; transform: scale(1.05); box-shadow: 0 0 10px #00ffaa; }
+  .matrix-cell.cell-focused { background: #00ffaa !important; color: #000000 !important; font-size: 13px; transform: scale(1.05); box-shadow: 0 0 10px #00ffaa; }
   
-  .macro-cell { color: #f4b400; font-size: 9px; }
+  .action-cell { color: #00e5ff; }
   .fn-cell { color: #ff3b3b; }
+  .skip-cell { color: #f4b400; }
 
   @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.6; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.6; } }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
@@ -54,11 +55,11 @@
 <div class="chat-container" id="main-container">
   <div id="status-bar" class="state-ready">
     <div class="dot"></div>
-    <span id="status-text">SNIPER MODE ATTIVA</span>
+    <span id="status-text">COSTRUZIONE FRASE</span>
   </div>
 
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Inserisci una parola (es: Serie A) e premi direttamente INVIA o un filtro arancione per i dati reali.</div>
+    <div class="bubble ai"><strong>IA:</strong> Sistema a Blocchi caricato. Scegli l'Avvio, l'Articolo, e infine digita l'argomento.</div>
   </div>
 
   <div class="neural-matrix-zone">
@@ -83,22 +84,47 @@
   let chatHistory = [];
   let currentText = "";
   let currentPrediction = "";
+  let chatFocus = false; 
 
-  // Riga 0 modificata con i Filtri Intelligenti per risposte istantanee
-  const matrix = [
-    ["💡 COMPLETA", "📰 NOTIZIE", "📊 CLASSIFICA", "⚽ RISULTATI", "☀️ METEO", " "],
+  // MACCHINA A STATI: 'STARTERS' -> 'ARTICLES' -> 'KEYBOARD'
+  let uiState = 'STARTERS'; 
+
+  // I 3 LAYOUT DIVERSI
+  const startersMatrix = [
+    ["COS'È", "QUAL È", "CHI È"],
+    ["DOV'È", "DOVE SONO", "COME"],
+    ["PERCHÉ", "QUANDO", "QUANTO"],
+    ["📰 NEWS SU", "☀️ METEO", "⌨️ TASTIERA DIRETTA"]
+  ];
+
+  const articlesMatrix = [
+    ["IL", "LO", "LA"],
+    ["I", "GLI", "LE"],
+    ["UN", "UNO", "UNA"],
+    ["⌫ ANNULLA", "⏩ SALTA ARTICOLO"]
+  ];
+
+  const keyboardMatrix = [
+    ["💡 COMPLETA", "⌫ CANC", "🧹 RESET", "🚀 INVIA"],
     ["E", "A", "I", "O", "U", "C"],
     ["L", "N", "R", "S", "T", "D"],
     ["P", "M", "V", "G", "B", "F"],
     ["H", "Q", "Z", "X", "Y", "K"],
-    ["J", "?", "W", "⌫ CANC", "🚀 INVIA", "🧹 PULISCI"]
+    ["J", "?", "W", " ", " ", " "]
   ];
 
-  let currentRow = 1; 
+  let currentRow = 0; 
   let currentCol = 0; 
-  let chatFocus = false; 
+
+  // Funzione per ottenere la matrice attiva in base allo stato
+  function getActiveMatrix() {
+    if (uiState === 'STARTERS') return startersMatrix;
+    if (uiState === 'ARTICLES') return articlesMatrix;
+    return keyboardMatrix;
+  }
 
   function renderMatrix() {
+    const matrix = getActiveMatrix();
     gridContainer.innerHTML = "";
     matrix.forEach((rowData, rIdx) => {
       const rowDiv = document.createElement('div');
@@ -108,8 +134,10 @@
         const cellDiv = document.createElement('div');
         cellDiv.className = 'matrix-cell';
         
-        if (rIdx === 0) cellDiv.classList.add('macro-cell');
+        // Colora tasti speciali
+        if (cellData.includes('⌨️') || cellData.includes('💡')) cellDiv.classList.add('action-cell');
         if (cellData.includes('⌫') || cellData.includes('🚀') || cellData.includes('🧹')) cellDiv.classList.add('fn-cell');
+        if (cellData.includes('⏩')) cellDiv.classList.add('skip-cell');
         
         if (!chatFocus && rIdx === currentRow && cIdx === currentCol) {
           cellDiv.classList.add('cell-focused');
@@ -122,17 +150,25 @@
     });
   }
 
+  // L'autocompletamento di Wikipedia parte solo nell'ultimo pezzo della frase
   async function fetchPrediction(text) {
-    if (text.length < 2) { currentPrediction = ""; textSuggestion.textContent = ""; return; }
+    // Estrae solo l'ultima parola digitata (esclude "Qual è la") per la previsione
+    const words = text.trim().split(" ");
+    const lastWord = words[words.length - 1];
+
+    if (uiState !== 'KEYBOARD' || lastWord.length < 2) { 
+      currentPrediction = ""; textSuggestion.textContent = ""; return; 
+    }
+    
     try {
-      const url = `https://it.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(text)}&limit=1&format=json&origin=*`;
+      const url = `https://it.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(lastWord)}&limit=1&format=json&origin=*`;
       const response = await fetch(url);
       const data = await response.json();
       if (data[1] && data[1].length > 0) {
         const suggestion = data[1][0];
-        if (suggestion.toLowerCase().startsWith(text.toLowerCase())) {
-          currentPrediction = suggestion;
-          textSuggestion.textContent = suggestion.substring(text.length);
+        if (suggestion.toLowerCase().startsWith(lastWord.toLowerCase())) {
+          currentPrediction = suggestion.substring(lastWord.length);
+          textSuggestion.textContent = currentPrediction;
         } else {
           currentPrediction = suggestion;
           textSuggestion.textContent = " -> " + suggestion;
@@ -143,12 +179,30 @@
 
   function updatePreview() {
     textPreview.textContent = currentText;
-    if (currentText === "") { textSuggestion.textContent = "Inizia a digitare..."; } 
-    else { fetchPrediction(currentText); }
+    if (currentText === "") { 
+      textSuggestion.textContent = uiState === 'STARTERS' ? "Scegli l'Avvio..." : ""; 
+    } else { 
+      fetchPrediction(currentText); 
+    }
+  }
+
+  // Cambia stato e resetta i cursori
+  function switchState(newState) {
+    uiState = newState;
+    currentRow = 0;
+    currentCol = 0;
+    
+    if (newState === 'STARTERS') statusText.textContent = "1. SCEGLI AVVIO";
+    if (newState === 'ARTICLES') statusText.textContent = "2. SCEGLI ARTICOLO";
+    if (newState === 'KEYBOARD') statusText.textContent = "3. DIGITA ARGOMENTO";
+    
+    renderMatrix();
+    updatePreview();
   }
 
   window.addEventListener('keydown', (e) => {
     if (isThinking) return;
+    const matrix = getActiveMatrix();
 
     if (chatFocus) {
       if (e.key === "ArrowUp") { displayBox.scrollTop -= 60; } 
@@ -158,8 +212,7 @@
         if (displayBox.scrollTop === oldScroll || (displayBox.scrollHeight - displayBox.scrollTop <= displayBox.clientHeight + 10)) {
           chatFocus = false;
           mainContainer.classList.remove('chat-scrolling');
-          currentRow = 0; currentCol = 0;
-          statusText.textContent = "TASTIERA ATTIVA";
+          statusText.textContent = uiState === 'KEYBOARD' ? "3. DIGITA ARGOMENTO" : "COSTRUZIONE FRASE";
         }
       }
       renderMatrix();
@@ -170,72 +223,91 @@
     else if (e.key === "ArrowRight") { currentCol = (currentCol + 1) % matrix[currentRow].length; } 
     else if (e.key === "ArrowUp") {
       currentRow--;
-      if (currentRow < 0) { chatFocus = true; mainContainer.classList.add('chat-scrolling'); statusText.textContent = "INFO CHAT (SU/GIÙ)"; }
+      if (currentRow < 0) { 
+        currentRow = 0;
+        chatFocus = true; 
+        mainContainer.classList.add('chat-scrolling'); 
+        statusText.textContent = "INFO CHAT (SU/GIÙ)"; 
+      }
     } 
     else if (e.key === "ArrowDown") { if (currentRow < matrix.length - 1) { currentRow++; } } 
+    
     else if (e.key === "Enter") {
       const val = matrix[currentRow][currentCol];
       
-      if (val === "💡 COMPLETA") {
-        if (currentPrediction !== "") { currentText = currentPrediction; currentPrediction = ""; }
-      } else if (val === "⌫ CANC") {
-        currentText = currentText.slice(0, -1);
-      } else if (val === "🧹 PULISCI") {
-        currentText = ""; currentPrediction = "";
-      } else if (val === "🚀 INVIA") {
-        if (currentText.trim() !== "") { prepareAndSend(currentText, ""); }
-      } else if (val === "📰 NOTIZIE" || val === "📊 CLASSIFICA" || val === "⚽ RISULTATI" || val === "☀️ METEO") {
-        if (currentText.trim() !== "") { prepareAndSend(currentText, val); }
-      } else {
-        currentText += val;
+      // LOGICA STATO 1: AVVIO
+      if (uiState === 'STARTERS') {
+        if (val === "⌨️ TASTIERA DIRETTA") {
+          currentText = "";
+          switchState('KEYBOARD');
+        } else {
+          currentText = val + " ";
+          switchState('ARTICLES');
+        }
+      }
+      // LOGICA STATO 2: ARTICOLI
+      else if (uiState === 'ARTICLES') {
+        if (val === "⌫ ANNULLA") {
+          currentText = "";
+          switchState('STARTERS');
+        } else if (val === "⏩ SALTA ARTICOLO") {
+          switchState('KEYBOARD');
+        } else {
+          currentText += val.toLowerCase() + " ";
+          switchState('KEYBOARD');
+        }
+      }
+      // LOGICA STATO 3: TASTIERA
+      else if (uiState === 'KEYBOARD') {
+        if (val === "💡 COMPLETA") {
+          if (currentPrediction !== "") { 
+            if (currentPrediction.includes("->")) currentText = currentText.substring(0, currentText.lastIndexOf(" ") + 1) + currentPrediction.replace(" -> ", "");
+            else currentText += currentPrediction; 
+            currentPrediction = ""; 
+          }
+        } else if (val === "⌫ CANC") {
+          currentText = currentText.slice(0, -1);
+          if (currentText.trim() === "") switchState('STARTERS'); // Torna indietro se svuoti tutto
+        } else if (val === "🧹 RESET") {
+          currentText = ""; currentPrediction = "";
+          switchState('STARTERS');
+        } else if (val === "🚀 INVIA") {
+          if (currentText.trim() !== "") { 
+            sendToAI(currentText); 
+            currentText = ""; 
+            currentPrediction = "";
+            switchState('STARTERS'); // A fine invio, torna pronto all'avvio
+          }
+        } else {
+          currentText += val;
+        }
       }
       updatePreview();
     }
     renderMatrix();
   });
 
-  renderMatrix();
-  updatePreview();
+  switchState('STARTERS');
 
   function appendBubble(sender, text) {
     chatHistory.push({ sender: sender, text: text });
     const bubble = document.createElement('div');
     bubble.className = `bubble ${sender}`;
-    bubble.innerHTML = sender === 'user' ? `[Target]: ${text}` : `<strong>IA:</strong> ${text}`;
+    bubble.innerHTML = sender === 'user' ? `[User]: ${text}` : `<strong>IA:</strong> ${text}`;
     displayBox.appendChild(bubble);
     setTimeout(() => { if (!chatFocus) displayBox.scrollTop = displayBox.scrollHeight; }, 50);
   }
 
-  // Funzione che ottimizza la query iniettando il contesto temporale e i filtri rapido
-  function prepareAndSend(keyword, filter) {
-    let finalQuery = keyword;
-    
-    // Se l'utente usa un filtro rapido, impacchettiamo la richiesta in modo perfetto per i motori di ricerca
-    if (filter === "📰 NOTIZIE") finalQuery = `ultime notizie flash oggi su ${keyword}`;
-    else if (filter === "📊 CLASSIFICA") finalQuery = `classifica aggiornata recente ${keyword}`;
-    else if (filter === "⚽ RISULTATI") finalQuery = `ultimi risultati partite e news di ${keyword}`;
-    else if (filter === "☀️ METEO") finalQuery = `meteo oggi e previsioni ${keyword}`;
-    else {
-      // Se invia la parola secca, forziamo un'espansione per dati recenti generalizzati
-      finalQuery = `${keyword} ultime notizie e dati aggiornati`;
-    }
-
-    sendToAI(finalQuery, keyword);
-    currentText = "";
-    currentPrediction = "";
-  }
-
-  async function sendToAI(searchQuery, visualKeyword) {
+  async function sendToAI(promptText) {
     isThinking = true;
     statusBar.className = "state-thinking";
-    statusText.textContent = "SNIPER SEARCH...";
-    appendBubble('user', visualKeyword); // Mostra sugli occhiali solo la parola semplice inserita
+    statusText.textContent = "ELABORAZIONE...";
+    appendBubble('user', promptText.trim());
 
-    // System prompt aggiornato al 2026 per distruggere le risposte generiche storiche
-    const systemPrompt = "Sei un assistente HUD ultra-veloce per occhiali AR. Ti trovi nell'anno 2026. L'utente ti fornisce parole chiave espanse. Devi fare una ricerca web in tempo reale e sputare fuori SOLO i dati più recenti, freschi e aggiornati ad oggi (2026). Sii telegrafico: usa solo elenchi puntati o massimo due righe di testo. Elimina introduzioni e saluti. Vai dritto al punto.";
+    const systemPrompt = "Sei un assistente per smart glasses nell'anno 2026. Fornisci risposte spietatamente concise e dati in tempo reale su query specifiche. Usa elenchi puntati o massimo due righe. Zero saluti.";
     
     try {
-      const url = `https://text.pollinations.ai/${encodeURIComponent(searchQuery)}?search=true&model=openai&system=${encodeURIComponent(systemPrompt)}`;
+      const url = `https://text.pollinations.ai/${encodeURIComponent(promptText)}?search=true&model=openai&system=${encodeURIComponent(systemPrompt)}`;
       const response = await fetch(url);
       let reply = (await response.text()).trim();
 
@@ -244,12 +316,12 @@
       }
       appendBubble('ai', reply);
     } catch (e) {
-      appendBubble('ai', 'Errore di caricamento.');
+      appendBubble('ai', 'Errore di rete.');
     }
 
     isThinking = false;
     statusBar.className = "state-ready";
-    statusText.textContent = "TASTIERA ATTIVA";
+    statusText.textContent = "1. SCEGLI AVVIO";
   }
 </script>
 </body>
