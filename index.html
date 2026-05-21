@@ -4,118 +4,200 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <meta name="theme-color" content="#000000">
-<title>HUD AI - P2P Version</title>
-<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<title>HUD AI - Neural Keyboard Version</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
   body { background-color: #020205; color: #ffffff; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 12px; overflow: hidden; user-select: none; }
-  .chat-container { background: #05050a; width: 100%; max-width: 360px; height: 85vh; border-radius: 24px; padding: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9); border: 2px solid #0b0b14; display: flex; flex-direction: column; justify-content: space-between; }
-  #status-bar { font-size: 11px; font-weight: bold; color: #555555; letter-spacing: 2px; display: flex; align-items: center; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid #1a1a26; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #555555; }
-  .state-listening .dot { background: #ff3b3b; animation: pulse 1s infinite; }
+  
+  .chat-container { 
+    background: #05050a; width: 100%; max-width: 360px; height: 90vh; 
+    border-radius: 24px; padding: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9); 
+    border: 2px solid #0b0b14; display: flex; flex-direction: column; justify-content: space-between; 
+  }
+  
+  #status-bar { font-size: 11px; font-weight: bold; color: #00ffaa; letter-spacing: 2px; display: flex; align-items: center; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid #1a1a26; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #00ffaa; }
   .state-thinking .dot { background: #f4b400; animation: pulse 1s infinite; }
-  .state-ready .dot { background: #00ffaa; }
+  
   #display-box { flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 14px 0; overflow-y: auto; scroll-behavior: smooth; }
   #display-box::-webkit-scrollbar { display: none; }
-  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.35; animation: fadeIn 0.2s ease forwards; word-wrap: break-word; }
-  .bubble.user { align-self: flex-end; background: rgba(0, 255, 170, 0.08); border: 1px solid #00ffaa; color: #00ffaa; border-bottom-right-radius: 4px; font-style: italic; }
+  
+  .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.35; animation: fadeIn 0.2s ease forwards; word-wrap: break-word; }
+  .bubble.user { align-self: flex-end; background: rgba(0, 255, 170, 0.08); border: 1px solid #00ffaa; color: #00ffaa; border-bottom-right-radius: 4px; }
   .bubble.ai { align-self: flex-start; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.4); color: #f0f0f0; border-bottom-left-radius: 4px; }
   .bubble.ai strong { color: #00e5ff; }
-  .buttons-menu { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 10px; }
-  .menu-btn { border-radius: 16px; height: 55px; font-size: 1.1rem; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: all 0.1s ease; outline: none; }
-  @keyframes pulse-focus { 0% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; } 50% { box-shadow: inset 0 0 0 4px #ffff00, 0 0 20px #ffff00; } 100% { box-shadow: inset 0 0 0 4px #00ffaa, 0 0 15px #00ffaa; } }
-  .menu-btn:focus { animation: pulse-focus 0.6s infinite; z-index: 100; }
-  #btn-talk { border: 1px solid #00ffaa; color: #00ffaa; background: rgba(0, 255, 170, 0.05); }
-  #btn-rollout { border: 1px solid #ff0044; color: #ff0044; background: rgba(255, 0, 68, 0.05); }
+
+  /* ==========================================
+     INTERFACCIA TASTIERA NEURALE HUD
+     ========================================== */
+  .neural-input-zone {
+    background: #090914; border: 1px solid #1a1a3a; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  #text-preview {
+    font-size: 15px; color: #fff; min-height: 22px; border-bottom: 1px dashed #333; padding-bottom: 4px; font-style: italic; word-break: break-all;
+  }
+  .keyboard-carousel {
+    display: flex; justify-content: center; align-items: center; gap: 10px; overflow: hidden; position: relative; height: 35px;
+  }
+  .char-item {
+    font-size: 14px; color: #555; transition: all 0.1s ease; min-width: 25px; text-align: center;
+  }
+  .char-item.active {
+    font-size: 20px; color: #00ffaa; font-weight: bold; border-bottom: 2px solid #00ffaa; transform: scale(1.2);
+  }
+  .quick-predictions {
+    display: flex; gap: 6px; justify-content: space-between; overflow-x: auto;
+  }
+  .predict-badge {
+    background: #111126; border: 1px solid #222; color: #888; font-size: 11px; padding: 4px 8px; border-radius: 8px; white-space: nowrap;
+  }
+  .predict-badge.focused {
+    border-color: #f4b400; color: #f4b400; background: rgba(244,180,0,0.05);
+  }
+
   @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.6; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.6; } }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
+
 <div class="chat-container">
   <div id="status-bar" class="state-ready">
     <div class="dot"></div>
-    <span id="status-text">AVVIO...</span>
+    <span id="status-text">INPUT NEURALE ATTIVO</span>
   </div>
+
   <div id="display-box">
-    <div class="bubble ai"><strong>IA:</strong> Sistema P2P caricato. Attendo connessione all'iPhone...</div>
+    <div class="bubble ai"><strong>IA:</strong> Sistema pronto. Usa i gesti del bracciale per scrivere velocemente.</div>
   </div>
-  <div class="buttons-menu">
-    <button id="btn-talk" class="menu-btn" tabIndex="0">PARLA</button>
-    <button id="btn-rollout" class="menu-btn" tabIndex="0">ROLLOUT</button>
+
+  <div class="neural-input-zone">
+    <div id="text-preview">Inizia a scrivere...</div>
+    
+    <div class="keyboard-carousel" id="carousel">
+      </div>
+
+    <div class="quick-predictions" id="predictions-box">
+      <div class="predict-badge focused" id="p1">[SPAZIO]</div>
+      <div class="predict-badge" id="p2">[CANCELLA]</div>
+      <div class="predict-badge" id="p3">[INVIA 🚀]</div>
+    </div>
   </div>
 </div>
 
 <script>
+  const displayBox = document.getElementById('display-box');
   const statusBar = document.getElementById('status-bar');
   const statusText = document.getElementById('status-text');
-  const displayBox = document.getElementById('display-box');
-  const btnTalk = document.getElementById('btn-talk');
-  const btnRollout = document.getElementById('btn-rollout');
+  const textPreview = document.getElementById('text-preview');
+  const carousel = document.getElementById('carousel');
+  
+  let isThinking = false;
+  let chatHistory = [];
+  let currentText = "";
 
-  let isThinking = false; 
-  let lastTriggerTime = 0; 
-  let chatHistory = []; 
-  let requestQueue = []; 
+  // Alfabeto HUD ordinato per frequenza d'uso nella lingua italiana per massima velocità
+  const alphabet = [" ", "E", "A", "I", "O", "U", "L", "N", "R", "S", "T", "C", "D", "P", "M", "V", "G", "B", "F", "H", "Q", "Z", "X", "Y", "K", "J", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "?", "."];
+  let currentIndex = 1; // Parte dalla 'E'
 
-  // ==========================================
-  // PEER-TO-PEER CONNESSIONE DIRETTA
-  // Legge il parametro "?room=TUA_PAROLA" dall'URL
-  // ==========================================
-  const urlParams = new URLSearchParams(window.location.search);
-  const roomName = urlParams.get('room'); 
-  let peer;
-  let conn;
+  // Gestione dei comandi rapidi (Spazio, Cancella, Invia)
+  let currentActionIndex = -1; // -1 significa che stiamo selezionando le lettere. 0,1,2 sono le azioni rapide.
+  const actions = ["SPACE", "BACKSPACE", "SEND"];
+  const badges = [document.getElementById('p1'), document.getElementById('p2'), document.getElementById('p3')];
 
-  function initP2P() {
-    if (!roomName) {
-      updateStatusDisplay('ERRORE URL');
-      appendBubble('ai', 'Per collegarti all\'iPhone, aggiungi <strong>?room=TUA_PAROLA</strong> alla fine dell\'URL nell\'app Meta.');
-      return;
+  // Renderizza la tastiera circolare nell'HUD
+  function renderCarousel() {
+    carousel.innerHTML = "";
+    // Mostra la lettera corrente e le 3 precedenti/successive per dare l'effetto rotazione
+    for (let i = -3; i <= 3; i++) {
+      let idx = (currentIndex + i + alphabet.length) % alphabet.length;
+      const char = alphabet[idx] === " " ? "␣" : alphabet[idx];
+      const div = document.createElement('div');
+      div.className = `char-item ${i === 0 && currentActionIndex === -1 ? 'active' : ''}`;
+      div.textContent = char;
+      carousel.appendChild(div);
+    }
+  }
+
+  function updateActionBadges() {
+    badges.forEach((b, idx) => {
+      if (idx === currentActionIndex) b.className = "predict-badge focused";
+      else b.className = "predict-badge";
+    });
+  }
+
+  // ==========================================================
+  // MAPPAZIONE DEI GESTI DEL BRACCIALE (Tasti tastiera standard)
+  // ==========================================================
+  window.addEventListener('keydown', (e) => {
+    if (isThinking) return;
+
+    // GESTO A (Es: Pinch Indice) -> Muove a Sinistra / Su
+    if (e.key === "ArrowLeft") {
+      if (currentActionIndex > -1) {
+        currentActionIndex--;
+        updateActionBadges();
+        renderCarousel();
+      } else {
+        currentIndex = (currentIndex - 1 + alphabet.length) % alphabet.length;
+        renderCarousel();
+      }
+    }
+    
+    // GESTO B (Es: Pinch Medio) -> Muove a Destra / Giù
+    else if (e.key === "ArrowRight") {
+      if (currentActionIndex < 2) {
+        currentActionIndex++;
+        if(currentActionIndex === 0) {
+          // Deseleziona carosello grafico
+        }
+        updateActionBadges();
+        renderCarousel();
+      }
+    }
+    
+    // GESTO C (Es: Ritorna alle lettere se sei sui comandi)
+    else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      currentActionIndex = -1;
+      updateActionBadges();
+      renderCarousel();
     }
 
-    // Inizializza il client P2P
-    peer = new Peer(); 
-
-    peer.on('open', (id) => {
-      // Quando il peer è pronto, si connette all'iPhone che ha come ID la tua "Stanza Segreta"
-      const targetId = 'iphone-' + roomName;
-      updateStatusDisplay('CERCO IPHONE...');
-      connectToiPhone(targetId);
-    });
-
-    peer.on('error', (err) => {
-      updateStatusDisplay('ERRORE P2P');
-    });
-  }
-
-  function connectToiPhone(targetId) {
-    conn = peer.connect(targetId);
-
-    conn.on('open', () => {
-      updateStatusDisplay('PRONTO (CONNESSO)');
-      appendBubble('ai', 'Collegamento diretto con l\'iPhone stabilito. Sblocca il microfono su Safari.');
-    });
-
-    conn.on('data', (data) => {
-      if (data.type === 'transcript') {
-        updateStatusDisplay('ELABORAZIONE...');
-        appendBubble('user', data.text);
-        pushToQueue(data.text);
-      } else if (data.type === 'error') {
-        updateStatusDisplay('ERRORE MIC IPHONE');
-        setTimeout(resetStatus, 2000);
+    // GESTO D (Es: Pinch forte / Click) -> Conferma e Scrivi
+    else if (e.key === "Enter") {
+      if (currentActionIndex === -1) {
+        // Aggiungi la lettera selezionata
+        if (currentText === "Inizia a scrivere...") currentText = "";
+        currentText += alphabet[currentIndex];
+        textPreview.textContent = currentText;
+      } else {
+        // Esegui azione rapida
+        const action = actions[currentActionIndex];
+        if (action === "SPACE") {
+          currentText += " ";
+          textPreview.textContent = currentText;
+        } else if (action === "BACKSPACE") {
+          currentText = currentText.slice(0, -1);
+          textPreview.textContent = currentText || "Inizia a scrivere...";
+        } else if (action === "SEND") {
+          if (currentText.trim() !== "" && currentText !== "Inizia a scrivere...") {
+            sendToAI(currentText);
+            currentText = "";
+            textPreview.textContent = "Inizia a scrivere...";
+          }
+        }
+        // Torna al carosello dopo un'azione
+        currentActionIndex = -1;
+        updateActionBadges();
+        renderCarousel();
       }
-    });
+    }
+  });
 
-    conn.on('close', () => {
-      updateStatusDisplay('IPHONE SCOLLEGATO');
-    });
-  }
+  // Inizializzazione della grafica
+  renderCarousel();
 
-  initP2P();
-
-  // Logica Chat e UI
+  // Logica di invio all'IA (Pollinations con Ricerca Web)
   function appendBubble(sender, text) {
     chatHistory.push({ sender: sender, text: text });
     const bubble = document.createElement('div');
@@ -123,107 +205,34 @@
     bubble.innerHTML = sender === 'user' ? text : `<strong>IA:</strong> ${text}`;
     displayBox.appendChild(bubble);
     setTimeout(() => { displayBox.scrollTop = displayBox.scrollHeight; }, 50);
-    resetStatus();
   }
 
-  function pushToQueue(promptText) {
-    requestQueue.push(promptText);
-    if (!isThinking) processNextQueueItem();
-    else updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
-  }
-
-  async function processNextQueueItem() {
-    if (requestQueue.length === 0) { isThinking = false; resetStatus(); return; }
-    const nextPrompt = requestQueue.shift();
-    if (nextPrompt === "__CANCELLED__") { setTimeout(processNextQueueItem, 50); return; }
-
+  async function sendToAI(promptText) {
     isThinking = true;
-    updateStatusDisplay('RICERCA WEB...');
+    statusBar.className = "state-thinking";
+    statusText.textContent = "RICERCA IN CORSO...";
+    appendBubble('user', promptText);
 
-    const apiMessages = [{ role: 'system', content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Verifica sempre le informazioni sul web. Rispondi in massimo due frasi cortissime. Solo testo semplice.' }];
-    chatHistory.slice(-4).forEach(msg => { apiMessages.push({ role: msg.sender === 'user' ? 'user' : 'assistant', content: msg.text }); });
-
+    const systemPrompt = "Sei un assistente HUD per occhiali smart. Rispondi in italiano. Usa la ricerca web attiva. Sii conciso (max due frasi brevi). Solo testo semplice.";
+    
     try {
-      const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=openai&system=${encodeURIComponent(apiMessages[0].content)}`;
-      const response = await fetch(url, { method: 'GET' });
-      if (!response.ok) throw new Error('Errore');
+      const url = `https://text.pollinations.ai/${encodeURIComponent(promptText)}?search=true&model=openai&system=${encodeURIComponent(systemPrompt)}`;
+      const response = await fetch(url);
       let reply = (await response.text()).trim();
-      
-      if (reply.startsWith('{') || reply.includes('"reasoning"')) {
-         try {
-             const jsonObj = JSON.parse(reply);
-             if (jsonObj.content) reply = jsonObj.content;
-             else throw new Error("Log");
-         } catch (e) { reply = "Errore nel parsing, ripeti?"; }
+
+      if (reply.startsWith('{')) {
+        try { const j = JSON.parse(reply); if(j.content) reply = j.content; } catch(e){}
       }
+
       appendBubble('ai', reply);
-    } catch (error) {
-      appendBubble('ai', 'Ricerca in corso troppo complessa. Ripeti.');
+    } catch (e) {
+      appendBubble('ai', 'Errore di rete. Riprova.');
     }
-    setTimeout(processNextQueueItem, 500);
+
+    isThinking = false;
+    statusBar.className = "state-ready";
+    statusText.textContent = "INPUT NEURALE ATTIVO";
   }
-
-  function removeLastUserRequest() {
-    if (requestQueue.length > 0) requestQueue.pop(); 
-    const userBubbles = displayBox.querySelectorAll('.bubble.user');
-    if (userBubbles.length > 0) {
-      userBubbles[userBubbles.length - 1].remove();
-      for (let i = chatHistory.length - 1; i >= 0; i--) {
-        if (chatHistory[i].sender === 'user') { chatHistory.splice(i, 1); break; }
-      }
-    }
-    resetStatus();
-  }
-
-  function updateStatusDisplay(stateText) {
-    if (stateText.includes('IPHONE')) statusBar.className = 'state-listening';
-    else if (stateText.includes('RICERCA') || stateText.includes('CODA')) statusBar.className = 'state-thinking';
-    else statusBar.className = 'state-ready';
-    statusText.textContent = stateText;
-  }
-
-  function resetStatus() {
-    if (requestQueue.length > 0) updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
-    else updateStatusDisplay(conn && conn.open ? 'PRONTO' : 'SCOLLEGATO');
-  }
-
-  // ==========================================
-  // COMANDO P2P ALL'IPHONE
-  // ==========================================
-  function toggleListening() {
-    if (!conn || !conn.open) {
-      updateStatusDisplay('IPHONE DISCONNESSO');
-      return;
-    }
-    updateStatusDisplay('IN ASCOLTO (IPHONE)...');
-    conn.send({ type: 'start_listening' }); 
-  }
-
-  function triggerTalk(e) {
-    if (e && e.type !== 'keydown') e.preventDefault(); 
-    const now = Date.now();
-    if (now - lastTriggerTime < 300) return; 
-    lastTriggerTime = now;
-    toggleListening();
-  }
-
-  function triggerRollout(e) {
-    if (e && e.type !== 'keydown') e.preventDefault(); 
-    const now = Date.now();
-    if (now - lastTriggerTime < 300) return;
-    lastTriggerTime = now;
-    removeLastUserRequest();
-  }
-
-  btnTalk.addEventListener('click', triggerTalk);
-  btnTalk.addEventListener('touchstart', triggerTalk);
-  btnTalk.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') triggerTalk(e); });
-
-  btnRollout.addEventListener('click', triggerRollout);
-  btnRollout.addEventListener('touchstart', triggerRollout);
-  btnRollout.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') triggerRollout(e); });
-
-  setTimeout(() => { btnTalk.focus(); }, 500);
 </script>
 </body>
 </html>
