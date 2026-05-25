@@ -3,76 +3,364 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>HUD Tilt-Writer</title>
+<meta name="theme-color" content="#000000">
+<title>HUD WhatsApp Style Chat with Queue</title>
+<link rel="icon" type="image/png" href="preview.png.jpg">
 <style>
-  body { background: #000; color: #fff; font-family: monospace; overflow: hidden; margin: 0; }
-  #wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+  :root {
+    --bg: #000000;
+    --text: #ffffff;
+    --dim: #555555;
+    --user-color: #39ff14; /* Verde WhatsApp / Neon */
+    --ai-color: #00e5ff;   /* Ciano */
+    --listening: #ff3b3b;
+  }
   
-  /* Reticolo di selezione (Ruota) */
-  #wheel { width: 200px; height: 200px; border-radius: 50%; border: 2px solid #333; position: relative; display: flex; align-items: center; justify-content: center; }
-  .sector { position: absolute; width: 50%; height: 50%; transform-origin: bottom right; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; }
+  * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
   
-  /* Quadranti */
-  #s0 { transform: rotate(-45deg) skewX(-45deg); background: #111; } /* UP */
-  #s1 { transform: rotate(45deg) skewX(-45deg); background: #111; }  /* RIGHT */
-  #s2 { transform: rotate(135deg) skewX(-45deg); background: #111; } /* DOWN */
-  #s3 { transform: rotate(225deg) skewX(-45deg); background: #111; } /* LEFT */
+  body, html {
+    margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden; touch-action: none;
+  }
+
+  #wrap {
+    display: flex; flex-direction: column; height: 100%; padding: 12px;
+    justify-content: space-between;
+  }
+
+  /* Header fisso in alto */
+  #status-bar {
+    font-size: 11px; font-weight: bold; color: var(--dim); letter-spacing: 2px;
+    display: flex; align-items: center; gap: 6px; padding-bottom: 6px;
+    border-bottom: 1px solid #111; z-index: 10; background: var(--bg);
+  }
   
-  .active { background: #39ff14 !important; color: #000; }
-  #preview { margin-bottom: 20px; font-size: 24px; color: #00e5ff; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  .state-listening .dot { background: var(--listening); animation: pulse 1s infinite; }
+  .state-thinking .dot { background: #f4b400; animation: pulse 1s infinite; }
+  .state-ready .dot { background: var(--user-color); }
+
+  /* Area Chat: Lista verticale a scorrimento style WhatsApp */
+  #display-box {
+    flex-grow: 1; display: flex; flex-direction: column;
+    gap: 12px; padding: 10px 0; overflow-y: scroll;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Nasconde la barra di scorrimento per estetica HUD */
+  #display-box::-webkit-scrollbar { display: none; }
+
+  /* Bolle della Chat */
+  .bubble {
+    max-width: 85%; padding: 10px 14px; border-radius: 16px;
+    font-size: 16px; line-height: 1.35; animation: fadeIn 0.2s ease forwards;
+    word-wrap: break-word;
+  }
+
+  /* Stile messaggio UTENTE (A destra, Verde) */
+  .bubble.user {
+    align-self: flex-end;
+    background: rgba(57, 255, 20, 0.08);
+    border: 1px solid var(--user-color);
+    color: var(--user-color);
+    border-bottom-right-radius: 4px;
+    font-style: italic;
+  }
+
+  /* Stile messaggio IA (A sinistra, Bianco/Ciano) */
+  .bubble.ai {
+    align-self: flex-start;
+    background: rgba(0, 229, 255, 0.05);
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    color: #f0f0f0;
+    border-bottom-left-radius: 4px;
+  }
+  .bubble.ai strong { color: var(--ai-color); }
+
+  #controls {
+    font-size: 10px; color: var(--dim); text-align: center;
+    border-top: 1px solid #111; padding-top: 6px; background: var(--bg);
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(0.9); opacity: 0.6; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(0.9); opacity: 0.6; }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-height: 360px) {
+    .bubble { font-size: 14px; padding: 8px 12px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="wrap">
-  <div id="preview">_</div>
-  <div id="wheel">
-    <div class="sector" id="s0" style="top:0; left:0;">A-F</div>
-    <div class="sector" id="s1" style="top:0; left:50%;">G-L</div>
-    <div class="sector" id="s2" style="top:50%; left:50%;">M-R</div>
-    <div class="sector" id="s3" style="top:50%; left:0;">S-Z</div>
+  <div id="status-bar" class="state-ready">
+    <div class="dot"></div>
+    <span id="status-text">PRONTO</span>
+  </div>
+
+  <div id="display-box">
+    <div class="bubble ai"><strong>IA:</strong> Ciao! Cronologia attiva con coda intelligente. Fai doppio pinch per parlare, le richieste si accoderanno senza errori. Swipe a destra per cancellare l'ultima domanda.</div>
+  </div>
+
+  <div id="controls">
+    <b>Doppio Pinch:</b> Parla • <b>Pinch Singolo:</b> Giù • <b>Pinch Lungo:</b> Su • <b>Swipe DX:</b> Cancella
   </div>
 </div>
 
 <script>
-  let currentSelection = -1;
-  const preview = document.getElementById('preview');
+(() => {
+  const statusBar = document.getElementById('status-bar');
+  const statusText = document.getElementById('status-text');
+  const displayBox = document.getElementById('display-box');
 
-  // Ascolta il giroscopio (Tilt)
-  window.addEventListener('deviceorientation', (event) => {
-    // Gamma: tilt dx/sx | Beta: tilt avanti/indietro
-    const gamma = event.gamma; 
-    const beta = event.beta;
+  let recognition;
+  let isListening = false;
+  let isThinking = false; 
+  
+  let chatHistory = []; 
+  let requestQueue = []; 
 
-    // Logica semplice: dividiamo la zona di tilt in 4
-    if (beta < -20) currentSelection = 0;      // Tilt avanti (UP)
-    else if (gamma > 20) currentSelection = 1; // Tilt destra (RIGHT)
-    else if (beta > 20) currentSelection = 2;  // Tilt indietro (DOWN)
-    else if (gamma < -20) currentSelection = 3; // Tilt sinistra (LEFT)
-    else currentSelection = -1;
+  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.lang = 'it-IT';
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
-    updateUI();
-  });
+    recognition.onstart = () => {
+      isListening = true;
+      updateStatusDisplay('ASCOLTO...');
+    };
 
-  function updateUI() {
-    document.querySelectorAll('.sector').forEach((el, i) => {
-      el.classList.toggle('active', i === currentSelection);
-    });
+    recognition.onerror = () => resetStatus();
+    recognition.onend = () => { isListening = false; };
+
+    recognition.onresult = (event) => {
+      const textSpoken = event.results[0][0].transcript;
+      appendBubble('user', textSpoken);
+      pushToQueue(textSpoken);
+    };
   }
 
-  // Simula il pinch (Click)
-  window.addEventListener('pointerdown', () => {
-    if (currentSelection !== -1) {
-      preview.textContent += ["A", "G", "M", "S"][currentSelection]; // Esempio logica
+  function appendBubble(sender, text) {
+    chatHistory.push({ sender: sender, text: text });
+    
+    const bubble = document.createElement('div');
+    bubble.className = `bubble ${sender}`;
+    bubble.innerHTML = sender === 'user' ? text : `<strong>IA:</strong> ${text}`;
+    
+    displayBox.appendChild(bubble);
+    
+    setTimeout(() => {
+      displayBox.scrollTop = displayBox.scrollHeight;
+    }, 50);
+
+    resetStatus();
+  }
+
+  function pushToQueue(promptText) {
+    requestQueue.push(promptText);
+    
+    if (!isThinking) {
+      processNextQueueItem();
+    } else {
+      updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
     }
+  }
+
+  async function processNextQueueItem() {
+    if (requestQueue.length === 0) {
+      isThinking = false;
+      resetStatus();
+      return;
+    }
+
+    const nextPrompt = requestQueue.shift();
+    
+    // Se la richiesta estratta è stata marcata come cancellata, passiamo subito alla successiva
+    if (nextPrompt === "__CANCELLED__") {
+      setTimeout(processNextQueueItem, 50);
+      return;
+    }
+
+    isThinking = true;
+    updateStatusDisplay('ELABORAZIONE...');
+
+    const apiMessages = [
+      { 
+        role: 'system', 
+        content: 'Sei un assistente HUD per occhiali smart. Rispondi in italiano. Sii preciso al 100% sui dati storici e sportivi. Verifica sempre le informazioni usando la ricerca web attiva (es. Paolo Maldini ha giocato solo nel Milan!). Rispondi in massimo due frasi cortissime senza fronzoli. Rispondi SEMPRE e SOLO con testo semplice in italiano. Non restituire MAI codice JSON, reasoning o tool_calls.' 
+      }
+    ];
+    
+    const recent = chatHistory.slice(-4);
+    recent.forEach(msg => {
+      apiMessages.push({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      });
+    });
+
+    try {
+      const url = `https://text.pollinations.ai/${encodeURIComponent(nextPrompt)}?search=true&model=openai&system=${encodeURIComponent(apiMessages[0].content)}`;
+
+      const response = await fetch(url, { method: 'GET' });
+
+      if (!response.ok) throw new Error('Errore di risposta');
+
+      let reply = await response.text();
+      reply = reply.trim();
+      
+      // FILTRO SUPER AGGRESSIVO ANTI-JSON LEAK
+      if (reply.startsWith('{') || reply.includes('"reasoning"')) {
+         try {
+             const jsonObj = JSON.parse(reply);
+             if (jsonObj.content && jsonObj.content !== "") {
+                 reply = jsonObj.content; // Prende solo la risposta pulita
+             } else {
+                 throw new Error("Solo log interno o reasoning rilevato");
+             }
+         } catch (e) {
+             reply = "Sto verificando i dati, puoi ripetere?";
+         }
+      }
+
+      appendBubble('ai', reply);
+      
+    } catch (error) {
+      appendBubble('ai', 'Ricerca in corso troppo complessa. Ripeti in modo più semplice.');
+    }
+
+    // Delay di sicurezza di 500ms tra una richiesta e l'altra
+    setTimeout(processNextQueueItem, 500);
+  }
+
+  /* RIMOZIONE DELLA RICHIESTA (SWIPE DX / BACKSPACE) */
+  function removeLastUserRequest() {
+    // 1. Se c'è qualcosa nella coda, rimuove l'ultimo elemento inserito
+    if (requestQueue.length > 0) {
+      requestQueue.pop(); 
+    } 
+    
+    // 2. Rimuove l'ultima bolla dell'utente sia dal DOM che dalla cronologia logica
+    const userBubbles = displayBox.querySelectorAll('.bubble.user');
+    if (userBubbles.length > 0) {
+      const lastUserBubble = userBubbles[userBubbles.length - 1];
+      lastUserBubble.remove();
+      
+      for (let i = chatHistory.length - 1; i >= 0; i--) {
+        if (chatHistory[i].sender === 'user') {
+          chatHistory.splice(i, 1);
+          break;
+        }
+      }
+    }
+    
+    resetStatus();
+  }
+
+  function updateStatusDisplay(stateText) {
+    if (stateText.includes('ASCOLTO')) statusBar.className = 'state-listening';
+    else if (stateText.includes('ELABORAZIONE') || stateText.includes('CODA')) statusBar.className = 'state-thinking';
+    else statusBar.className = 'state-ready';
+    
+    statusText.textContent = stateText;
+  }
+
+  function resetStatus() {
+    if (requestQueue.length > 0) {
+      updateStatusDisplay(`IN CODA [${requestQueue.length}]`);
+    } else {
+      updateStatusDisplay('PRONTO');
+    }
+  }
+
+  function scrollChatDown() { displayBox.scrollBy({ top: 100, behavior: 'smooth' }); }
+  function scrollChatUp() { displayBox.scrollBy({ top: -100, behavior: 'smooth' }); }
+
+  function toggleListening() {
+    if (!recognition) return;
+    if (isListening) recognition.stop(); else recognition.start();
+  }
+
+  let lastClickTime = 0;
+  let longTimer = null;
+  let isLongAction = false;
+  const DOUBLE_DELAY = 280;
+  const LONG_DELAY = 450;
+
+  /* EVENTI DI SWIPE (GESTURE) */
+  let touchStartX = 0;
+  let touchStartY = 0;
+  const SWIPE_THRESHOLD = 60; // Distanza minima in pixel per lo swipe
+  const SWIPE_RESTRAINT = 40; // Massimo scostamento verticale concesso
+
+  document.addEventListener('touchstart', (e) => {
+    const touch = e.changedTouches[0];
+    touchStartX = touch.pageX;
+    touchStartY = touch.pageY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', (e) => {
+    const touch = e.changedTouches[0];
+    const distX = touch.pageX - touchStartX;
+    const distY = touch.pageY - touchStartY;
+
+    // Se si muove a destra superando le soglie matematiche, cancella
+    if (distX >= SWIPE_THRESHOLD && Math.abs(distY) <= SWIPE_RESTRAINT) {
+      removeLastUserRequest();
+      if(e.cancelable) e.preventDefault();
+      return;
+    }
+  }, { passive: false });
+
+  /* PINCH EMULATION (POINTER EVENTS) */
+  document.addEventListener('pointerdown', (e) => {
+    isLongAction = false;
+    clearTimeout(longTimer);
+    longTimer = setTimeout(() => {
+      isLongAction = true;
+      scrollChatUp();
+    }, LONG_DELAY);
   });
 
-  // Richiesta permessi (necessaria su molti browser mobile/HUD)
-  document.body.onclick = () => {
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-      DeviceOrientationEvent.requestPermission();
+  document.addEventListener('pointerup', (e) => {
+    clearTimeout(longTimer);
+    if (isLongAction) return;
+
+    const now = Date.now();
+    if (now - lastClickTime < DOUBLE_DELAY) {
+      lastClickTime = 0;
+      toggleListening();
+      if(e) e.preventDefault();
+      return;
     }
-  };
+
+    lastClickTime = now;
+    setTimeout(() => {
+      if (lastClickTime !== now) return;
+      lastClickTime = 0;
+      scrollChatDown();
+    }, DOUBLE_DELAY);
+  });
+
+  /* CONTROLLI DA TASTIERA PC */
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { e.preventDefault(); toggleListening(); }
+    if (e.key === 'ArrowDown') { scrollChatDown(); }
+    if (e.key === 'ArrowUp') { scrollChatUp(); }
+    if (e.key === 'Backspace' || e.key === 'Delete') { removeLastUserRequest(); }
+  });
+
+})();
 </script>
 </body>
 </html>
